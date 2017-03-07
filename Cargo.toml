@@ -9,6 +9,7 @@ rustun = "0.1"
 fibers = "0.1"
 futures = "0.1"
 trackable = "0.1"
+handy_async = "0.2"
 
 [dev-dependencies]
 clap = "2"
