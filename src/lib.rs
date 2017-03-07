@@ -7,8 +7,12 @@ extern crate futures;
 extern crate trackable;
 
 pub use error::{Error, ErrorKind};
+pub use method::Method;
+
+pub mod methods;
 
 mod error;
+mod method;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 

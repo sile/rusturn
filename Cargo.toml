@@ -9,3 +9,7 @@ rustun = "0.1"
 fibers = "0.1"
 futures = "0.1"
 trackable = "0.1"
+
+[dev-dependencies]
+clap = "2"
+slog-term = "1"
