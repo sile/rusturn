@@ -9,11 +9,13 @@ extern crate handy_async;
 
 pub use error::{Error, ErrorKind};
 pub use method::Method;
+pub use attribute::Attribute;
 
 pub mod rfc5766;
 
 mod error;
 mod method;
+mod attribute;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 
