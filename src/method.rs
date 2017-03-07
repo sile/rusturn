@@ -39,3 +39,38 @@ impl StunMethod for Method {
         }
     }
 }
+impl From<rfc5389::methods::Binding> for Method {
+    fn from(_: rfc5389::methods::Binding) -> Self {
+        Method::Binding
+    }
+}
+impl From<rfc5766::methods::Allocate> for Method {
+    fn from(_: rfc5766::methods::Allocate) -> Self {
+        Method::Allocate
+    }
+}
+impl From<rfc5766::methods::Refresh> for Method {
+    fn from(_: rfc5766::methods::Refresh) -> Self {
+        Method::Refresh
+    }
+}
+impl From<rfc5766::methods::Send> for Method {
+    fn from(_: rfc5766::methods::Send) -> Self {
+        Method::Send
+    }
+}
+impl From<rfc5766::methods::Data> for Method {
+    fn from(_: rfc5766::methods::Data) -> Self {
+        Method::Data
+    }
+}
+impl From<rfc5766::methods::CreatePermission> for Method {
+    fn from(_: rfc5766::methods::CreatePermission) -> Self {
+        Method::CreatePermission
+    }
+}
+impl From<rfc5766::methods::ChannelBind> for Method {
+    fn from(_: rfc5766::methods::ChannelBind) -> Self {
+        Method::ChannelBind
+    }
+}
