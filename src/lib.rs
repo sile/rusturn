@@ -7,13 +7,14 @@ extern crate futures;
 extern crate trackable;
 extern crate handy_async;
 
-pub use error::{Error, ErrorKind};
+pub use rustun::{Error, ErrorKind};
 pub use method::Method;
 pub use attribute::Attribute;
 
+pub mod types;
 pub mod rfc5766;
+pub mod server;
 
-mod error;
 mod method;
 mod attribute;
 
