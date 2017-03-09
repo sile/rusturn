@@ -1,6 +1,7 @@
 use rustun::Attribute as StunAttribute;
 use rustun::message::RawMessage;
 use rustun::attribute::{Type, RawAttribute};
+use rustun::types::TryAsRef;
 use rustun::rfc5389;
 use trackable::error::ErrorKindExt;
 
@@ -12,6 +13,19 @@ macro_rules! impl_attr_from {
         impl From<$rfc::attributes::$attr> for Attribute {
             fn from(f: $rfc::attributes::$attr) -> Self {
                 Attribute::$attr(f)
+            }
+        }
+    }
+}
+macro_rules! impl_attr_try_as_ref {
+    ($rfc:ident, $attr:ident) => {
+        impl TryAsRef<$rfc::attributes::$attr> for Attribute {
+            fn try_as_ref(&self) -> Option<& $rfc::attributes::$attr> {
+                if let Attribute::$attr(ref a) = *self {
+                    Some(a)
+                } else {
+                    None
+                }
             }
         }
     }
@@ -62,6 +76,26 @@ impl_attr_from!(rfc5766, EvenPort);
 impl_attr_from!(rfc5766, RequestedTransport);
 impl_attr_from!(rfc5766, DontFragment);
 impl_attr_from!(rfc5766, ReservationToken);
+impl_attr_try_as_ref!(rfc5389, MappedAddress);
+impl_attr_try_as_ref!(rfc5389, Username);
+impl_attr_try_as_ref!(rfc5389, MessageIntegrity);
+impl_attr_try_as_ref!(rfc5389, ErrorCode);
+impl_attr_try_as_ref!(rfc5389, UnknownAttributes);
+impl_attr_try_as_ref!(rfc5389, Realm);
+impl_attr_try_as_ref!(rfc5389, Nonce);
+impl_attr_try_as_ref!(rfc5389, XorMappedAddress);
+impl_attr_try_as_ref!(rfc5389, Software);
+impl_attr_try_as_ref!(rfc5389, AlternateServer);
+impl_attr_try_as_ref!(rfc5389, Fingerprint);
+impl_attr_try_as_ref!(rfc5766, ChannelNumber);
+impl_attr_try_as_ref!(rfc5766, Lifetime);
+impl_attr_try_as_ref!(rfc5766, XorPeerAddress);
+impl_attr_try_as_ref!(rfc5766, Data);
+impl_attr_try_as_ref!(rfc5766, XorRelayedAddress);
+impl_attr_try_as_ref!(rfc5766, EvenPort);
+impl_attr_try_as_ref!(rfc5766, RequestedTransport);
+impl_attr_try_as_ref!(rfc5766, DontFragment);
+impl_attr_try_as_ref!(rfc5766, ReservationToken);
 impl StunAttribute for Attribute {
     fn get_type(&self) -> Type {
         match *self {
