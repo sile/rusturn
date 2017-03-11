@@ -15,11 +15,11 @@ use rusturn::server::DefaultHandler;
 fn main() {
     let matches = App::new("turnsrv")
         .arg(Arg::with_name("PORT")
-            .short("p")
-            .long("port")
-            .takes_value(true)
-            .required(true)
-            .default_value("3478"))
+                 .short("p")
+                 .long("port")
+                 .takes_value(true)
+                 .default_value("3478"))
+        .arg(Arg::with_name("PASSWORD").long("password").takes_value(true).default_value("password"))
         .get_matches();
 
     let port = matches.value_of("PORT").unwrap();
@@ -30,10 +30,13 @@ fn main() {
                                   .fuse(),
                               o!("place" => place_fn));
 
+    let password = matches.value_of("PASSWORD").unwrap();
+    let mut handler = DefaultHandler::with_logger(logger);
+    handler.set_password(password);
+
     let mut executor = InPlaceExecutor::new().unwrap();
     let spawner = executor.handle();
-    let monitor = executor.spawn_monitor(UdpServer::new(addr)
-        .start(spawner.boxed(), DefaultHandler::with_logger(logger)));
+    let monitor = executor.spawn_monitor(UdpServer::new(addr).start(spawner.boxed(), handler));
     let result = executor.run_fiber(monitor).unwrap();
     println!("RESULT: {:?}", result);
 }

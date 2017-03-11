@@ -205,6 +205,9 @@ impl RequestedTransport {
     pub fn protocol(&self) -> u8 {
         self.0
     }
+    pub fn is_udp(&self) -> bool {
+        self.protocol() == PROTOCOL_UDP
+    }
 }
 impl Attribute for RequestedTransport {
     fn get_type(&self) -> Type {

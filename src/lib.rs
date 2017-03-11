@@ -1,5 +1,6 @@
 #[macro_use]
 extern crate slog;
+extern crate rand;
 extern crate rustun;
 extern crate fibers;
 extern crate futures;
