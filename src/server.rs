@@ -8,7 +8,7 @@ use rustun::{self, HandleMessage};
 use rustun::message::{Message, Indication};
 use rustun::rfc5389;
 use rustun::rfc5389::attributes::{XorMappedAddress, MessageIntegrity, Username, Nonce, Realm};
-use rustun::rfc5389::attributes::{UnknownAttributes, Software};
+use rustun::rfc5389::attributes::UnknownAttributes;
 
 use {Error, Method, Attribute};
 use rfc5766::errors;
@@ -130,11 +130,7 @@ impl DefaultHandler {
             Err(response)
         }
     }
-    fn handle_allocate(&mut self,
-                       client: SocketAddr,
-                       server: SocketAddr,
-                       request: Request)
-                       -> BoxFuture<Response, ()> {
+    fn handle_allocate(&mut self, client: SocketAddr, request: Request) -> BoxFuture<Response, ()> {
         // 6.2.  Receiving an Allocate Request
         //
         // https://tools.ietf.org/html/rfc5766#section-6.2
@@ -151,13 +147,13 @@ impl DefaultHandler {
         let username = request.get_attribute::<Username>().cloned().unwrap();
         let realm = request.get_attribute::<Realm>().cloned().unwrap();
 
-        // // 2.
-        // if self.allocations.contains_key(&client) {
-        //     info!(self.logger, "Existing allocation: {}", client);
-        //     let response = request.into_error_response()
-        //         .with_error_code(errors::AllocationMismatch);
-        //     return futures::finished(Err(response)).boxed();
-        // }
+        // 2.
+        if self.allocations.contains_key(&client) {
+            info!(self.logger, "Existing allocation: {}", client);
+            let response = request.into_error_response()
+                .with_error_code(errors::AllocationMismatch);
+            return futures::finished(Err(response)).boxed();
+        }
 
         // 3.
         match request.get_attribute::<RequestedTransport>().cloned() {
@@ -210,29 +206,25 @@ impl DefaultHandler {
         // 7.
 
         // 8.
-        let relayed_addr = SocketAddr::new(self.addr, server.port());
+        let relay_port = client.port() + 7; // TODO
+        let relayed_addr = SocketAddr::new(self.addr, relay_port);
 
         info!(self.logger,
               "Creates the allocation for '{}' (relayed_addr='{}'",
               client,
               relayed_addr);
 
-        // TODO: allocate a dedicated port
-        //       (and spawns a fiber for handling it)
         self.allocations.insert(client, Allocation::new(self.logger.clone()));
         let mut response = request.into_success_response();
         response.add_attribute(XorRelayedAddress::new(relayed_addr));
         response.add_attribute(XorMappedAddress::new(client));
         response.add_attribute(Lifetime::new(Duration::from_secs(600)));
-        response.add_attribute(Software::new("None".to_string()).unwrap());
         let mi = MessageIntegrity::new_long_term_credential(&response,
                                                             &username,
                                                             &realm,
                                                             &self.password)
-            .unwrap();
+                .unwrap();
         response.add_attribute(mi);
-        // response.add_attribute(Fingerprint::new());
-        debug!(self.logger, "Allocation success response: {:?}", response);
         futures::finished(Ok(response)).boxed()
     }
 }
@@ -241,21 +233,16 @@ impl HandleMessage for DefaultHandler {
     type Attribute = Attribute;
     type HandleCall = BoxFuture<Response, ()>;
     type HandleCast = BoxFuture<(), ()>;
-    fn handle_call(&mut self,
-                   client: SocketAddr,
-                   server: SocketAddr,
-                   request: Request)
-                   -> Self::HandleCall {
+    fn handle_call(&mut self, client: SocketAddr, request: Request) -> Self::HandleCall {
         debug!(self.logger, "RECV: {:?}", request);
         match *request.method() {
             Method::Binding => self.handle_binding(client, request),
-            Method::Allocate => self.handle_allocate(client, server, request),
+            Method::Allocate => self.handle_allocate(client, request),
             _ => unimplemented!(),
         }
     }
     fn handle_cast(&mut self,
                    _client: SocketAddr,
-                   _server: SocketAddr,
                    _message: Indication<Self::Method, Self::Attribute>)
                    -> Self::HandleCast {
         futures::finished(()).boxed()

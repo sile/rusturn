@@ -65,6 +65,8 @@ fn main() {
     let response = track_try_unwrap!(call(&mut executor, &mut client, request.clone()));
     println!("[2] ALLOCATE response: {:?}", response);
     assert!(response.is_ok());
+    let mi = response.get_attribute::<MessageIntegrity>().unwrap();
+    track_try_unwrap!(mi.check_long_term_credential(&username, &realm, password));
 }
 
 fn call<E: Executor, M: Method + Send + 'static>(executor: &mut E,
