@@ -37,10 +37,11 @@ fn main() {
                               o!("place" => place_fn));
 
     let password = matches.value_of("PASSWORD").unwrap();
-    let mut handler = DefaultHandler::with_logger(logger, addr.ip());
-    handler.set_password(password);
 
     let mut executor = InPlaceExecutor::new().unwrap();
+    let mut handler = DefaultHandler::with_logger(logger, executor.handle(), addr.ip());
+    handler.set_password(password);
+
     let spawner = executor.handle();
     let monitor = if matches.is_present("TCP") {
         executor.spawn_monitor(TcpServer::new(addr).start(spawner, handler))
