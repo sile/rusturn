@@ -1,20 +1,20 @@
 use std::time::Duration;
 use std::net::{SocketAddr, IpAddr};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use rand;
 use slog::{self, Logger};
 use fibers::{Spawn, BoxSpawn};
 use fibers::net::UdpSocket;
-use fibers::net::futures::RecvFrom;
+use fibers::net::futures::{RecvFrom, SendTo};
 use fibers::sync::mpsc;
 use fibers::sync::oneshot;
-use futures::{self, Future, BoxFuture, Poll, Async};
+use futures::{self, Future, BoxFuture, Poll, Async, Stream};
 use rustun::{self, HandleMessage, Method as StunMethod};
 use rustun::server::IndicationSender;
-use rustun::message::{Message, Indication};
+use rustun::message::Message;
 use rustun::rfc5389;
 use rustun::rfc5389::attributes::{XorMappedAddress, MessageIntegrity, Username, Nonce, Realm};
-use rustun::rfc5389::attributes::UnknownAttributes;
+use rustun::rfc5389::attributes::{UnknownAttributes, Software};
 
 use {Error, Method, Attribute};
 use rfc5766;
@@ -23,6 +23,7 @@ use rfc5766::attributes::{RequestedTransport, DontFragment, ReservationToken, Ev
 use rfc5766::attributes::{Lifetime, XorRelayedAddress, XorPeerAddress};
 
 type Request = rustun::message::Request<Method, Attribute>;
+type Indication = rustun::message::Indication<Method, Attribute>;
 type Response = rustun::message::Response<Method, Attribute>;
 type ErrorResponse = rustun::message::ErrorResponse<Method, Attribute>;
 
@@ -70,9 +71,10 @@ impl DefaultHandler {
     }
 
     fn random_nonce(&self) -> Nonce {
-        let chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        //let chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        let chars = "abcdefghijklmnopqrstuvwxyz0123456789";
         let mut buf = String::new();
-        for _ in 0..32 {
+        for _ in 0..16 {
             let i = rand::random::<usize>() % chars.len();
             buf.push(chars.as_bytes()[i] as char);
         }
@@ -235,12 +237,13 @@ impl DefaultHandler {
         let (tx, rx) = oneshot::channel();
         let password = self.password.clone();
         let relay_addr = format!("{}:0", self.addr).parse().unwrap();
+        let (forward_tx, forward_rx) = mpsc::channel();
         let future = track_err!(UdpSocket::bind(relay_addr))
             .map_err(|e: Error| panic!("Error: {}", e))
             .and_then(move |socket| {
                 let relayed_addr = socket.local_addr().unwrap();
                 info!(logger,
-                      "Creates the allocation for '{}' (relayed_addr='{}'",
+                      "Creates the allocation for '{}' (relayed_addr='{}')",
                       client,
                       relayed_addr);
 
@@ -248,6 +251,7 @@ impl DefaultHandler {
                 response.add_attribute(XorRelayedAddress::new(relayed_addr));
                 response.add_attribute(XorMappedAddress::new(client));
                 response.add_attribute(Lifetime::new(Duration::from_secs(600)));
+                response.add_attribute(Software::new("None".to_string()).unwrap());
                 let mi = MessageIntegrity::new_long_term_credential(&response,
                                                                     &username,
                                                                     &realm,
@@ -255,10 +259,10 @@ impl DefaultHandler {
                         .unwrap();
                 response.add_attribute(mi);
                 tx.send(Ok(response)).unwrap();
-                RelayLoop::new(logger, info_tx, client, socket)
+                RelayLoop::new(logger, info_tx, forward_rx, client, socket)
             });
         self.spawner.spawn(future);
-        self.allocations.insert(client, Allocation::new(self.logger.clone()));
+        self.allocations.insert(client, Allocation::new(self.logger.clone(), forward_tx));
         rx.map_err(|_| ()).boxed()
     }
     fn handle_refresh(&mut self, client: SocketAddr, request: Request) -> BoxFuture<Response, ()> {
@@ -280,6 +284,7 @@ impl DefaultHandler {
 
         let mut response = request.into_success_response();
         response.add_attribute(Lifetime::new(lifetime.duration()));
+        response.add_attribute(Software::new("None".to_string()).unwrap());
         let mi = MessageIntegrity::new_long_term_credential(&response,
                                                             &username,
                                                             &realm,
@@ -320,6 +325,7 @@ impl DefaultHandler {
         // TODO: install permission
 
         let mut response = request.into_success_response();
+        response.add_attribute(Software::new("None".to_string()).unwrap());
         let mi = MessageIntegrity::new_long_term_credential(&response,
                                                             &username,
                                                             &realm,
@@ -329,19 +335,29 @@ impl DefaultHandler {
         futures::finished(Ok(response)).boxed()
     }
     fn handle_data(&mut self, client: SocketAddr, peer: SocketAddr, data: Vec<u8>) {
-        debug!(self.logger,
-               "Relays {} bytes data from '{}' to '{}'",
-               data.len(),
-               peer,
-               client);
+        // debug!(self.logger,
+        //        "Relays {} bytes data from '{}' to '{}'",
+        //        data.len(),
+        //        peer,
+        //        client);
         let mut indication = rfc5766::methods::Data.indication::<Attribute>();
         indication.add_attribute(rfc5766::attributes::Data::new(data));
         indication.add_attribute(XorPeerAddress::new(peer));
         self.indication_tx
             .as_mut()
             .unwrap()
-            .send(peer, indication)
+            .send(client, indication)
             .unwrap();
+    }
+    fn handle_send(&mut self, client: SocketAddr, indication: Indication) -> BoxFuture<(), ()> {
+        // TODO: error handlings
+        let peer = indication.get_attribute::<XorPeerAddress>().unwrap();
+        assert!(indication.get_attribute::<DontFragment>().is_none());
+        let data = indication.get_attribute::<rfc5766::attributes::Data>().unwrap();
+        if let Some(allocation) = self.allocations.get(&client) {
+            allocation.forward_tx.send((peer.address(), data.clone().unwrap())).unwrap();
+        }
+        futures::finished(()).boxed()
     }
 }
 impl HandleMessage for DefaultHandler {
@@ -355,24 +371,29 @@ impl HandleMessage for DefaultHandler {
         self.indication_tx = Some(indication_tx);
     }
     fn handle_call(&mut self, client: SocketAddr, request: Request) -> Self::HandleCall {
-        debug!(self.logger, "RECV: {:?}", request);
         match *request.method() {
             Method::Binding => self.handle_binding(client, request),
             Method::Allocate => self.handle_allocate(client, request),
             Method::CreatePermission => self.handle_create_permission(client, request),
             Method::Refresh => self.handle_refresh(client, request),
-            _ => unimplemented!(),
+            _ => {
+                warn!(self.logger, "RECV({}): {:?}", client, request);
+                unimplemented!()
+            }
         }
     }
-    fn handle_cast(&mut self,
-                   _client: SocketAddr,
-                   _message: Indication<Self::Method, Self::Attribute>)
-                   -> Self::HandleCast {
-        futures::finished(()).boxed()
+    fn handle_cast(&mut self, client: SocketAddr, indication: Indication) -> Self::HandleCast {
+        match *indication.method() {
+            Method::Send => self.handle_send(client, indication),
+            _ => {
+                warn!(self.logger, "RECV({}): {:?}", client, indication);
+                unimplemented!()
+            }
+        }
     }
     fn handle_error(&mut self, client: SocketAddr, error: Error) {
         warn!(self.logger,
-              "Cannot handle a message from the client {}: {}",
+              "Cannot handle a message from the client '{}': {}",
               client,
               error);
     }
@@ -388,13 +409,15 @@ pub struct Allocation {
     logger: Logger,
     permissions: Vec<()>,
     channels: Vec<()>,
+    forward_tx: mpsc::Sender<(SocketAddr, Vec<u8>)>,
 }
 impl Allocation {
-    pub fn new(logger: Logger) -> Self {
+    pub fn new(logger: Logger, forward_tx: mpsc::Sender<(SocketAddr, Vec<u8>)>) -> Self {
         Allocation {
             logger: logger,
             permissions: Vec::new(),
             channels: Vec::new(),
+            forward_tx: forward_tx,
         }
     }
 }
@@ -406,19 +429,30 @@ pub struct RelayLoop {
     info_tx: mpsc::Sender<Info>,
     socket: UdpSocket,
     recv: RecvFrom<Vec<u8>>,
+    forward_rx: mpsc::Receiver<(SocketAddr, Vec<u8>)>,
+    send: Option<SendTo<Vec<u8>>>,
+    queue: VecDeque<(SocketAddr, Vec<u8>)>,
 }
 impl RelayLoop {
     fn new(logger: Logger,
            info_tx: mpsc::Sender<Info>,
+           forward_rx: mpsc::Receiver<(SocketAddr, Vec<u8>)>,
            client: SocketAddr,
            socket: UdpSocket)
            -> Self {
+        info!(logger,
+              "Starts relay loop for '{}' (relayed = '{}')",
+              client,
+              socket.local_addr().unwrap());
         RelayLoop {
             logger: logger,
             info_tx: info_tx,
+            forward_rx: forward_rx,
             client: client,
             socket: socket.clone(),
-            recv: socket.recv_from(vec![0; 1024]),
+            recv: socket.recv_from(vec![0; 10240]),
+            send: None,
+            queue: VecDeque::new(),
         }
     }
 }
@@ -427,6 +461,36 @@ impl Future for RelayLoop {
     type Error = ();
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        loop {
+            match self.forward_rx.poll().unwrap() {
+                Async::NotReady => break,
+                Async::Ready(None) => return Ok(Async::Ready(())),
+                Async::Ready(Some(item)) => self.queue.push_back(item),
+            }
+        }
+        loop {
+            match self.send.poll() {
+                Err(e) => {
+                    warn!(self.logger, "Socket send error: {:?}", e);
+                    return Err(());
+                }
+                Ok(Async::NotReady) => break,
+                Ok(Async::Ready(_)) => {
+                    self.send = None;
+                    if let Some((peer, data)) = self.queue.pop_front() {
+                        debug!(self.logger,
+                               "RELAY: '{}' ='{}'=> '{}' ({} bytes)",
+                               self.client,
+                               self.socket.local_addr().unwrap(),
+                               peer,
+                               data.len());
+                        self.send = Some(self.socket.clone().send_to(data, peer));
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
         match track_err!(self.recv.poll().map_err(|(_, _, e)| e)) {
             Err(e) => {
                 let e: Error = e;
@@ -437,12 +501,13 @@ impl Future for RelayLoop {
             Ok(Async::Ready((socket, mut buf, size, peer))) => {
                 buf.truncate(size);
                 debug!(self.logger,
-                       "Recv {} bytes from '{}', relays to '{}'",
-                       buf.len(),
+                       "RELAY: '{}' <='{}'= '{} ({} bytes)",
+                       self.client,
+                       self.socket.local_addr().unwrap(),
                        peer,
-                       self.client);
+                       buf.len());
                 self.info_tx.send(Info::Data(self.client, peer, buf)).unwrap();
-                self.recv = socket.recv_from(vec![0; 1024]);
+                self.recv = socket.recv_from(vec![0; 10240]);
             }
         }
         Ok(Async::NotReady)

@@ -13,8 +13,8 @@ use rustun::message::{Request, Response, Message};
 use rustun::client::UdpClient;
 use rustun::rfc5389::attributes::{Realm, Username, Nonce, MessageIntegrity};
 use rusturn::Attribute;
-use rusturn::rfc5766::methods::Allocate;
-use rusturn::rfc5766::attributes::RequestedTransport;
+use rusturn::rfc5766::methods::{Allocate, CreatePermission};
+use rusturn::rfc5766::attributes::{RequestedTransport, XorPeerAddress};
 
 fn main() {
     let matches = App::new("turncli")
@@ -56,7 +56,7 @@ fn main() {
     let mut request = Allocate.request();
     request.add_attribute(username.clone());
     request.add_attribute(realm.clone());
-    request.add_attribute(nonce);
+    request.add_attribute(nonce.clone());
     request.add_attribute(RequestedTransport::new());
     let mi = MessageIntegrity::new_long_term_credential(&request, &username, &realm, password)
         .unwrap();
@@ -64,6 +64,23 @@ fn main() {
 
     let response = track_try_unwrap!(call(&mut executor, &mut client, request.clone()));
     println!("[2] ALLOCATE response: {:?}", response);
+    assert!(response.is_ok());
+    let mi = response.get_attribute::<MessageIntegrity>().unwrap();
+    track_try_unwrap!(mi.check_long_term_credential(&username, &realm, password));
+
+    // Permission
+    let peer = XorPeerAddress::new("127.0.0.1:4000".parse().unwrap());
+    let mut request = CreatePermission.request();
+    request.add_attribute(username.clone());
+    request.add_attribute(realm.clone());
+    request.add_attribute(nonce);
+    request.add_attribute(peer);
+    let mi = MessageIntegrity::new_long_term_credential(&request, &username, &realm, password)
+        .unwrap();
+    request.add_attribute(mi);
+
+    let response = track_try_unwrap!(call(&mut executor, &mut client, request.clone()));
+    println!("[3] CREATE-PERMISSION response: {:?}", response);
     assert!(response.is_ok());
     let mi = response.get_attribute::<MessageIntegrity>().unwrap();
     track_try_unwrap!(mi.check_long_term_credential(&username, &realm, password));

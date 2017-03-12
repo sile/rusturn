@@ -46,7 +46,9 @@ fn main() {
     let monitor = if matches.is_present("TCP") {
         executor.spawn_monitor(TcpServer::new(addr).start(spawner, handler))
     } else {
-        executor.spawn_monitor(UdpServer::new(addr).start(spawner, handler))
+        let mut server = UdpServer::new(addr);
+        server.recv_buffer_size(10240);
+        executor.spawn_monitor(server.start(spawner, handler))
     };
     let result = executor.run_fiber(monitor).unwrap();
     println!("RESULT: {:?}", result);
