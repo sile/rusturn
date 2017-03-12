@@ -8,7 +8,7 @@ use rustun::{self, HandleMessage};
 use rustun::message::{Message, Indication};
 use rustun::rfc5389;
 use rustun::rfc5389::attributes::{XorMappedAddress, MessageIntegrity, Username, Nonce, Realm};
-use rustun::rfc5389::attributes::UnknownAttributes;
+use rustun::rfc5389::attributes::{UnknownAttributes, Software};
 
 use {Error, Method, Attribute};
 use rfc5766::errors;
@@ -151,13 +151,13 @@ impl DefaultHandler {
         let username = request.get_attribute::<Username>().cloned().unwrap();
         let realm = request.get_attribute::<Realm>().cloned().unwrap();
 
-        // 2.
-        if self.allocations.contains_key(&client) {
-            info!(self.logger, "Existing allocation: {}", client);
-            let response = request.into_error_response()
-                .with_error_code(errors::AllocationMismatch);
-            return futures::finished(Err(response)).boxed();
-        }
+        // // 2.
+        // if self.allocations.contains_key(&client) {
+        //     info!(self.logger, "Existing allocation: {}", client);
+        //     let response = request.into_error_response()
+        //         .with_error_code(errors::AllocationMismatch);
+        //     return futures::finished(Err(response)).boxed();
+        // }
 
         // 3.
         match request.get_attribute::<RequestedTransport>().cloned() {
@@ -211,6 +211,7 @@ impl DefaultHandler {
 
         // 8.
         let relayed_addr = SocketAddr::new(self.addr, server.port());
+
         info!(self.logger,
               "Creates the allocation for '{}' (relayed_addr='{}'",
               client,
@@ -222,12 +223,13 @@ impl DefaultHandler {
         let mut response = request.into_success_response();
         response.add_attribute(XorRelayedAddress::new(relayed_addr));
         response.add_attribute(XorMappedAddress::new(client));
-        response.add_attribute(Lifetime::new(Duration::from_secs(3600)));
+        response.add_attribute(Lifetime::new(Duration::from_secs(600)));
+        response.add_attribute(Software::new("None".to_string()).unwrap());
         let mi = MessageIntegrity::new_long_term_credential(&response,
                                                             &username,
                                                             &realm,
                                                             &self.password)
-                .unwrap();
+            .unwrap();
         response.add_attribute(mi);
         // response.add_attribute(Fingerprint::new());
         debug!(self.logger, "Allocation success response: {:?}", response);
