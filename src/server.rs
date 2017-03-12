@@ -13,7 +13,7 @@ use rustun::rfc5389::attributes::UnknownAttributes;
 use {Error, Method, Attribute};
 use rfc5766::errors;
 use rfc5766::attributes::{RequestedTransport, DontFragment, ReservationToken, EvenPort};
-use rfc5766::attributes::{Lifetime, XorRelayedAddress};
+use rfc5766::attributes::{Lifetime, XorRelayedAddress, XorPeerAddress};
 
 type Request = rustun::message::Request<Method, Attribute>;
 type Response = rustun::message::Response<Method, Attribute>;
@@ -206,6 +206,8 @@ impl DefaultHandler {
         // 7.
 
         // 8.
+
+        //
         let relay_port = client.port() + 7; // TODO
         let relayed_addr = SocketAddr::new(self.addr, relay_port);
 
@@ -227,6 +229,73 @@ impl DefaultHandler {
         response.add_attribute(mi);
         futures::finished(Ok(response)).boxed()
     }
+    fn handle_refresh(&mut self, client: SocketAddr, request: Request) -> BoxFuture<Response, ()> {
+        let request = match self.check_credential(client, request) {
+            Err(response) => {
+                return futures::finished(Err(response)).boxed();
+            }
+            Ok(request) => request,
+        };
+        let username = request.get_attribute::<Username>().cloned().unwrap();
+        let realm = request.get_attribute::<Realm>().cloned().unwrap();
+
+        let lifetime = request.get_attribute::<Lifetime>()
+            .cloned()
+            .unwrap_or_else(|| Lifetime::new(Duration::from_secs(600)));
+        if lifetime.duration().as_secs() == 0 {
+            info!(self.logger, "Remove the allocation for '{}'", client);
+        }
+
+        let mut response = request.into_success_response();
+        response.add_attribute(Lifetime::new(lifetime.duration()));
+        let mi = MessageIntegrity::new_long_term_credential(&response,
+                                                            &username,
+                                                            &realm,
+                                                            &self.password)
+                .unwrap();
+        response.add_attribute(mi);
+        futures::finished(Ok(response)).boxed()
+    }
+    fn handle_create_permission(&mut self,
+                                client: SocketAddr,
+                                request: Request)
+                                -> BoxFuture<Response, ()> {
+        let request = match self.check_credential(client, request) {
+            Err(response) => {
+                return futures::finished(Err(response)).boxed();
+            }
+            Ok(request) => request,
+        };
+        let username = request.get_attribute::<Username>().cloned().unwrap();
+        let realm = request.get_attribute::<Realm>().cloned().unwrap();
+
+        // TODO: Support multiple permissions
+        let peer = if let Some(a) = request.get_attribute::<XorPeerAddress>().cloned() {
+            a
+        } else {
+            warn!(self.logger,
+                  "'{}' has no 'XOR-PEER-ADDRESS' attribute",
+                  client);
+            let response = request.into_error_response()
+                .with_error_code(rfc5389::errors::BadRequest);
+            return futures::finished(Err(response)).boxed();
+        };
+        info!(self.logger,
+              "New permission installed for '{}': permitted peer is '{}'",
+              client,
+              peer.address());
+
+        // TODO: install permission
+
+        let mut response = request.into_success_response();
+        let mi = MessageIntegrity::new_long_term_credential(&response,
+                                                            &username,
+                                                            &realm,
+                                                            &self.password)
+                .unwrap();
+        response.add_attribute(mi);
+        futures::finished(Ok(response)).boxed()
+    }
 }
 impl HandleMessage for DefaultHandler {
     type Method = Method;
@@ -238,6 +307,8 @@ impl HandleMessage for DefaultHandler {
         match *request.method() {
             Method::Binding => self.handle_binding(client, request),
             Method::Allocate => self.handle_allocate(client, request),
+            Method::CreatePermission => self.handle_create_permission(client, request),
+            Method::Refresh => self.handle_refresh(client, request),
             _ => unimplemented!(),
         }
     }
