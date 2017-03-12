@@ -6,24 +6,30 @@ extern crate fibers;
 extern crate rustun;
 extern crate rusturn;
 
+use std::net::SocketAddr;
 use clap::{App, Arg};
 use slog::{Logger, DrainExt, Record, LevelFilter};
 use fibers::{Executor, InPlaceExecutor, Spawn};
-use rustun::server::UdpServer;
+use rustun::server::{UdpServer, TcpServer};
 use rusturn::server::DefaultHandler;
 
 fn main() {
     let matches = App::new("turnsrv")
-        .arg(Arg::with_name("PORT")
-                 .short("p")
-                 .long("port")
-                 .takes_value(true)
-                 .default_value("3478"))
-        .arg(Arg::with_name("PASSWORD").long("password").takes_value(true).default_value("password"))
-        .get_matches();
+        .arg(Arg::with_name("TCP")
+             .long("tcp"))
+        .arg(Arg::with_name("ADDR")
+             .short("a")
+             .long("addr")
+             .takes_value(true)
+             .default_value("127.0.0.1:3478"))
+        .arg(Arg::with_name("PASSWORD")
+             .long("password")
+             .takes_value(true)
+             .default_value("password"))
+         .get_matches();
 
-    let port = matches.value_of("PORT").unwrap();
-    let addr = format!("0.0.0.0:{}", port).parse().expect("Invalid UDP address");
+    let addr = matches.value_of("ADDR").unwrap();
+    let addr: SocketAddr = addr.parse().expect("Invalid UDP address");
 
     let place_fn = |info: &Record| format!("{}:{}", info.module(), info.line());
     let logger = Logger::root(LevelFilter::new(slog_term::streamer().build(), slog::Level::Debug)
@@ -31,12 +37,16 @@ fn main() {
                               o!("place" => place_fn));
 
     let password = matches.value_of("PASSWORD").unwrap();
-    let mut handler = DefaultHandler::with_logger(logger);
+    let mut handler = DefaultHandler::with_logger(logger, addr.ip());
     handler.set_password(password);
 
     let mut executor = InPlaceExecutor::new().unwrap();
     let spawner = executor.handle();
-    let monitor = executor.spawn_monitor(UdpServer::new(addr).start(spawner.boxed(), handler));
+    let monitor = if matches.is_present("TCP") {
+        executor.spawn_monitor(TcpServer::new(addr).start(spawner, handler))
+    } else {
+        executor.spawn_monitor(UdpServer::new(addr).start(spawner, handler))
+    };
     let result = executor.run_fiber(monitor).unwrap();
     println!("RESULT: {:?}", result);
 }

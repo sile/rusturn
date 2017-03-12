@@ -1,4 +1,5 @@
-use std::net::SocketAddr;
+use std::time::Duration;
+use std::net::{SocketAddr, IpAddr};
 use std::collections::HashMap;
 use rand;
 use slog::{self, Logger};
@@ -12,6 +13,7 @@ use rustun::rfc5389::attributes::UnknownAttributes;
 use {Error, Method, Attribute};
 use rfc5766::errors;
 use rfc5766::attributes::{RequestedTransport, DontFragment, ReservationToken, EvenPort};
+use rfc5766::attributes::{Lifetime, XorRelayedAddress};
 
 type Request = rustun::message::Request<Method, Attribute>;
 type Response = rustun::message::Response<Method, Attribute>;
@@ -20,17 +22,19 @@ type ErrorResponse = rustun::message::ErrorResponse<Method, Attribute>;
 #[derive(Debug)]
 pub struct DefaultHandler {
     logger: Logger,
+    addr: IpAddr,
     realm: Realm,
     password: String,
-    allocations: HashMap<SocketAddr, ()>,
+    allocations: HashMap<SocketAddr, Allocation>,
 }
 impl DefaultHandler {
-    pub fn new() -> Self {
-        Self::with_logger(Logger::root(slog::Discard, o!()))
+    pub fn new(addr: IpAddr) -> Self {
+        Self::with_logger(Logger::root(slog::Discard, o!()), addr)
     }
-    pub fn with_logger(logger: Logger) -> Self {
+    pub fn with_logger(logger: Logger, addr: IpAddr) -> Self {
         DefaultHandler {
             logger: logger,
+            addr: addr,
             realm: rfc5389::attributes::Realm::new("localhost".to_string()).unwrap(),
             password: "foobarbaz".to_string(), // XXX
             allocations: HashMap::new(),
@@ -95,7 +99,8 @@ impl DefaultHandler {
                   username.name(),
                   realm.text(),
                   nonce.value());
-            if let Err(e) = message_integrity.check_long_term_credential(&self.password) {
+            if let Err(e) =
+                message_integrity.check_long_term_credential(&username, &realm, &self.password) {
                 warn!(self.logger,
                       "Message integrity check for '{}' is failed: {}",
                       client,
@@ -125,7 +130,11 @@ impl DefaultHandler {
             Err(response)
         }
     }
-    fn handle_allocate(&mut self, client: SocketAddr, request: Request) -> BoxFuture<Response, ()> {
+    fn handle_allocate(&mut self,
+                       client: SocketAddr,
+                       server: SocketAddr,
+                       request: Request)
+                       -> BoxFuture<Response, ()> {
         // 6.2.  Receiving an Allocate Request
         //
         // https://tools.ietf.org/html/rfc5766#section-6.2
@@ -139,6 +148,8 @@ impl DefaultHandler {
             }
             Ok(request) => request,
         };
+        let username = request.get_attribute::<Username>().cloned().unwrap();
+        let realm = request.get_attribute::<Realm>().cloned().unwrap();
 
         // 2.
         if self.allocations.contains_key(&client) {
@@ -199,10 +210,28 @@ impl DefaultHandler {
         // 7.
 
         // 8.
+        let relayed_addr = SocketAddr::new(self.addr, server.port());
+        info!(self.logger,
+              "Creates the allocation for '{}' (relayed_addr='{}'",
+              client,
+              relayed_addr);
 
-        info!(self.logger, "Creates the allocation for '{}'", client);
-
-        panic!()
+        // TODO: allocate a dedicated port
+        //       (and spawns a fiber for handling it)
+        self.allocations.insert(client, Allocation::new(self.logger.clone()));
+        let mut response = request.into_success_response();
+        response.add_attribute(XorRelayedAddress::new(relayed_addr));
+        response.add_attribute(XorMappedAddress::new(client));
+        response.add_attribute(Lifetime::new(Duration::from_secs(3600)));
+        let mi = MessageIntegrity::new_long_term_credential(&response,
+                                                            &username,
+                                                            &realm,
+                                                            &self.password)
+                .unwrap();
+        response.add_attribute(mi);
+        // response.add_attribute(Fingerprint::new());
+        debug!(self.logger, "Allocation success response: {:?}", response);
+        futures::finished(Ok(response)).boxed()
     }
 }
 impl HandleMessage for DefaultHandler {
@@ -210,16 +239,21 @@ impl HandleMessage for DefaultHandler {
     type Attribute = Attribute;
     type HandleCall = BoxFuture<Response, ()>;
     type HandleCast = BoxFuture<(), ()>;
-    fn handle_call(&mut self, client: SocketAddr, request: Request) -> Self::HandleCall {
+    fn handle_call(&mut self,
+                   client: SocketAddr,
+                   server: SocketAddr,
+                   request: Request)
+                   -> Self::HandleCall {
         debug!(self.logger, "RECV: {:?}", request);
         match *request.method() {
             Method::Binding => self.handle_binding(client, request),
-            Method::Allocate => self.handle_allocate(client, request),
+            Method::Allocate => self.handle_allocate(client, server, request),
             _ => unimplemented!(),
         }
     }
     fn handle_cast(&mut self,
                    _client: SocketAddr,
+                   _server: SocketAddr,
                    _message: Indication<Self::Method, Self::Attribute>)
                    -> Self::HandleCast {
         futures::finished(()).boxed()
@@ -229,5 +263,21 @@ impl HandleMessage for DefaultHandler {
               "Cannot handle a message from the client {}: {}",
               client,
               error);
+    }
+}
+
+#[derive(Debug)]
+pub struct Allocation {
+    logger: Logger,
+    permissions: Vec<()>,
+    channels: Vec<()>,
+}
+impl Allocation {
+    pub fn new(logger: Logger) -> Self {
+        Allocation {
+            logger: logger,
+            permissions: Vec::new(),
+            channels: Vec::new(),
+        }
     }
 }
