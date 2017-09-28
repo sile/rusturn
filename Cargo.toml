@@ -9,7 +9,7 @@ rand = "0.3"
 rustun = "0.1"
 fibers = "0.1"
 futures = "0.1"
-trackable = "0.1"
+trackable = "0.2"
 handy_async = "0.2"
 
 [dev-dependencies]

@@ -98,6 +98,5 @@ fn call<E: Executor, M: Method + Send + 'static>(
     request: Request<M, Attribute>,
 ) -> Result<Response<M, Attribute>, Error> {
     let monitor = executor.handle().spawn_monitor(client.call(request));
-    let response = track_try!(executor.run_fiber(monitor).unwrap());
-    Ok(response)
+    track!(executor.run_fiber(monitor).unwrap().map_err(Error::from))
 }

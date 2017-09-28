@@ -8,7 +8,7 @@ use fibers::net::UdpSocket;
 use fibers::net::futures::{RecvFrom, SendTo};
 use fibers::sync::mpsc;
 use fibers::sync::oneshot;
-use futures::{self, Future, BoxFuture, Poll, Async, Stream};
+use futures::{self, Future, Poll, Async, Stream};
 use rustun::{self, HandleMessage, Method as StunMethod};
 use rustun::server::IndicationSender;
 use rustun::message::Message;
@@ -16,7 +16,7 @@ use rustun::rfc5389;
 use rustun::rfc5389::attributes::{XorMappedAddress, MessageIntegrity, Username, Nonce, Realm};
 use rustun::rfc5389::attributes::{UnknownAttributes, Software};
 
-use {Error, Method, Attribute};
+use {Error, Method, Attribute, BoxFuture};
 use rfc5766;
 use rfc5766::errors;
 use rfc5766::attributes::{RequestedTransport, DontFragment, ReservationToken, EvenPort};
@@ -84,7 +84,7 @@ impl DefaultHandler {
     fn handle_binding(&mut self, client: SocketAddr, request: Request) -> BoxFuture<Response, ()> {
         let mut response = request.into_success_response();
         response.add_attribute(XorMappedAddress::new(client));
-        futures::finished(Ok(response)).boxed()
+        Box::new(futures::finished(Ok(response)))
     }
 
     fn check_credential(
@@ -183,7 +183,7 @@ impl DefaultHandler {
         // 1.
         let request = match self.check_credential(client, request) {
             Err(response) => {
-                return futures::finished(Err(response)).boxed();
+                return Box::new(futures::finished(Err(response)));
             }
             Ok(request) => request,
         };
@@ -196,7 +196,7 @@ impl DefaultHandler {
             let response = request.into_error_response().with_error_code(
                 errors::AllocationMismatch,
             );
-            return futures::finished(Err(response)).boxed();
+            return Box::new(futures::finished(Err(response)));
         }
 
         // 3.
@@ -205,13 +205,13 @@ impl DefaultHandler {
                 let response = request.into_error_response().with_error_code(
                     rfc5389::errors::BadRequest,
                 );
-                return futures::finished(Err(response)).boxed();
+                return Box::new(futures::finished(Err(response)));
             }
             Some(a) if !a.is_udp() => {
                 let response = request.into_error_response().with_error_code(
                     errors::UnsupportedTransportProtocol,
                 );
-                return futures::finished(Err(response)).boxed();
+                return Box::new(futures::finished(Err(response)));
             }
             _ => {}
         }
@@ -227,7 +227,7 @@ impl DefaultHandler {
                 rfc5389::errors::UnknownAttribute,
             );
             response.add_attribute(UnknownAttributes::new(vec![a.get_type()]));
-            return futures::finished(Err(response)).boxed();
+            return Box::new(futures::finished(Err(response)));
         }
 
         // 5.
@@ -241,7 +241,7 @@ impl DefaultHandler {
                 rfc5389::errors::UnknownAttribute,
             );
             response.add_attribute(UnknownAttributes::new(vec![a.get_type()]));
-            return futures::finished(Err(response)).boxed();
+            return Box::new(futures::finished(Err(response)));
         }
 
         // 6.
@@ -255,7 +255,7 @@ impl DefaultHandler {
                 rfc5389::errors::UnknownAttribute,
             );
             response.add_attribute(UnknownAttributes::new(vec![a.get_type()]));
-            return futures::finished(Err(response)).boxed();
+            return Box::new(futures::finished(Err(response)));
         }
 
         // 7.
@@ -303,12 +303,12 @@ impl DefaultHandler {
                 forward_tx,
             ),
         );
-        rx.map_err(|_| ()).boxed()
+        Box::new(rx.map_err(|_| ()))
     }
     fn handle_refresh(&mut self, client: SocketAddr, request: Request) -> BoxFuture<Response, ()> {
         let request = match self.check_credential(client, request) {
             Err(response) => {
-                return futures::finished(Err(response)).boxed();
+                return Box::new(futures::finished(Err(response)));
             }
             Ok(request) => request,
         };
@@ -333,7 +333,7 @@ impl DefaultHandler {
             &self.password,
         ).unwrap();
         response.add_attribute(mi);
-        futures::finished(Ok(response)).boxed()
+        Box::new(futures::finished(Ok(response)))
     }
     fn handle_create_permission(
         &mut self,
@@ -342,7 +342,7 @@ impl DefaultHandler {
     ) -> BoxFuture<Response, ()> {
         let request = match self.check_credential(client, request) {
             Err(response) => {
-                return futures::finished(Err(response)).boxed();
+                return Box::new(futures::finished(Err(response)));
             }
             Ok(request) => request,
         };
@@ -361,7 +361,7 @@ impl DefaultHandler {
             let response = request.into_error_response().with_error_code(
                 rfc5389::errors::BadRequest,
             );
-            return futures::finished(Err(response)).boxed();
+            return Box::new(futures::finished(Err(response)));
         };
         info!(
             self.logger,
@@ -381,7 +381,7 @@ impl DefaultHandler {
             &self.password,
         ).unwrap();
         response.add_attribute(mi);
-        futures::finished(Ok(response)).boxed()
+        Box::new(futures::finished(Ok(response)))
     }
     fn handle_data(&mut self, client: SocketAddr, peer: SocketAddr, data: Vec<u8>) {
         // debug!(self.logger,
@@ -411,7 +411,7 @@ impl DefaultHandler {
                 .send((peer.address(), data.clone().unwrap()))
                 .unwrap();
         }
-        futures::finished(()).boxed()
+        Box::new(futures::finished(()))
     }
 }
 impl HandleMessage for DefaultHandler {
