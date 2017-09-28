@@ -19,20 +19,26 @@ use rusturn::rfc5766::attributes::{RequestedTransport, XorPeerAddress};
 fn main() {
     let matches = App::new("turncli")
         .arg(Arg::with_name("TCP").long("tcp"))
-        .arg(Arg::with_name("SERVER")
-            .short("s")
-            .long("server")
-            .takes_value(true)
-            .default_value("127.0.0.1:3478"))
-        .arg(Arg::with_name("USERNAME")
-            .short("u")
-            .long("username")
-            .takes_value(true)
-            .default_value("foo"))
-        .arg(Arg::with_name("PASSWORD")
-            .long("password")
-            .takes_value(true)
-            .default_value("password"))
+        .arg(
+            Arg::with_name("SERVER")
+                .short("s")
+                .long("server")
+                .takes_value(true)
+                .default_value("127.0.0.1:3478"),
+        )
+        .arg(
+            Arg::with_name("USERNAME")
+                .short("u")
+                .long("username")
+                .takes_value(true)
+                .default_value("foo"),
+        )
+        .arg(
+            Arg::with_name("PASSWORD")
+                .long("password")
+                .takes_value(true)
+                .default_value("password"),
+        )
         .get_matches();
 
     let server = matches.value_of("SERVER").unwrap();
@@ -86,10 +92,11 @@ fn main() {
     track_try_unwrap!(mi.check_long_term_credential(&username, &realm, password));
 }
 
-fn call<E: Executor, M: Method + Send + 'static>(executor: &mut E,
-                                                 client: &mut UdpClient,
-                                                 request: Request<M, Attribute>)
-                                                 -> Result<Response<M, Attribute>, Error> {
+fn call<E: Executor, M: Method + Send + 'static>(
+    executor: &mut E,
+    client: &mut UdpClient,
+    request: Request<M, Attribute>,
+) -> Result<Response<M, Attribute>, Error> {
     let monitor = executor.handle().spawn_monitor(client.call(request));
     let response = track_try!(executor.run_fiber(monitor).unwrap());
     Ok(response)

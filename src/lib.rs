@@ -20,9 +20,3 @@ mod method;
 mod attribute;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {}
-}

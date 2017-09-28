@@ -183,7 +183,10 @@ impl StunAttribute for Attribute {
             rfc5766::attributes::TYPE_RESERVATION_TOKEN => {
                 rfc5766::attributes::ReservationToken::try_from_raw(attr, message).map(From::from)
             }
-            t => Err(ErrorKind::Unsupported.cause(format!("Unknown attribute: type={}", t))),
+            t => Err(ErrorKind::Unsupported.cause(format!(
+                "Unknown attribute: type={}",
+                t
+            ))),
         }
     }
     fn encode_value(&self, message: &RawMessage) -> Result<Vec<u8>> {

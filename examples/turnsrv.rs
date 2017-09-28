@@ -15,26 +15,30 @@ use rusturn::server::DefaultHandler;
 
 fn main() {
     let matches = App::new("turnsrv")
-        .arg(Arg::with_name("TCP")
-             .long("tcp"))
-        .arg(Arg::with_name("ADDR")
-             .short("a")
-             .long("addr")
-             .takes_value(true)
-             .default_value("127.0.0.1:3478"))
-        .arg(Arg::with_name("PASSWORD")
-             .long("password")
-             .takes_value(true)
-             .default_value("password"))
-         .get_matches();
+        .arg(Arg::with_name("TCP").long("tcp"))
+        .arg(
+            Arg::with_name("ADDR")
+                .short("a")
+                .long("addr")
+                .takes_value(true)
+                .default_value("127.0.0.1:3478"),
+        )
+        .arg(
+            Arg::with_name("PASSWORD")
+                .long("password")
+                .takes_value(true)
+                .default_value("password"),
+        )
+        .get_matches();
 
     let addr = matches.value_of("ADDR").unwrap();
     let addr: SocketAddr = addr.parse().expect("Invalid UDP address");
 
     let place_fn = |info: &Record| format!("{}:{}", info.module(), info.line());
-    let logger = Logger::root(LevelFilter::new(slog_term::streamer().build(), slog::Level::Debug)
-                                  .fuse(),
-                              o!("place" => place_fn));
+    let logger = Logger::root(
+        LevelFilter::new(slog_term::streamer().build(), slog::Level::Debug).fuse(),
+        o!("place" => place_fn),
+    );
 
     let password = matches.value_of("PASSWORD").unwrap();
 

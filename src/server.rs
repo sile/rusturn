@@ -47,10 +47,11 @@ impl DefaultHandler {
     pub fn new<S: Spawn + Send + 'static>(spawner: S, addr: IpAddr) -> Self {
         Self::with_logger(Logger::root(slog::Discard, o!()), spawner, addr)
     }
-    pub fn with_logger<S: Spawn + Send + 'static>(logger: Logger,
-                                                  spawner: S,
-                                                  addr: IpAddr)
-                                                  -> Self {
+    pub fn with_logger<S: Spawn + Send + 'static>(
+        logger: Logger,
+        spawner: S,
+        addr: IpAddr,
+    ) -> Self {
         let (info_tx, _) = mpsc::channel();
         DefaultHandler {
             logger: logger,
@@ -86,67 +87,85 @@ impl DefaultHandler {
         futures::finished(Ok(response)).boxed()
     }
 
-    fn check_credential(&self,
-                        client: SocketAddr,
-                        request: Request)
-                        -> Result<Request, ErrorResponse> {
+    fn check_credential(
+        &self,
+        client: SocketAddr,
+        request: Request,
+    ) -> Result<Request, ErrorResponse> {
         if let Some(message_integrity) = request.get_attribute::<MessageIntegrity>().cloned() {
             let username = if let Some(a) = request.get_attribute::<Username>().cloned() {
                 a
             } else {
                 warn!(self.logger, "'{}' has no 'USERNAME' attribute", client);
-                let response = request.into_error_response()
-                    .with_error_code(rfc5389::errors::BadRequest);
+                let response = request.into_error_response().with_error_code(
+                    rfc5389::errors::BadRequest,
+                );
                 return Err(response);
             };
             let realm = if let Some(a) = request.get_attribute::<Realm>().cloned() {
                 a
             } else {
                 warn!(self.logger, "'{}' has no 'REALM' attribute", client);
-                let response = request.into_error_response()
-                    .with_error_code(rfc5389::errors::BadRequest);
+                let response = request.into_error_response().with_error_code(
+                    rfc5389::errors::BadRequest,
+                );
                 return Err(response);
             };
             let nonce = if let Some(a) = request.get_attribute::<Nonce>().cloned() {
                 a
             } else {
                 warn!(self.logger, "'{}' has no 'NONCE' attribute", client);
-                let response = request.into_error_response()
-                    .with_error_code(rfc5389::errors::BadRequest);
+                let response = request.into_error_response().with_error_code(
+                    rfc5389::errors::BadRequest,
+                );
                 return Err(response);
             };
             // TODO: "stale nonce" check
 
-            info!(self.logger,
-                  "'{}': username={}, realm={}, nonce={}",
-                  client,
-                  username.name(),
-                  realm.text(),
-                  nonce.value());
-            if let Err(e) =
-                message_integrity.check_long_term_credential(&username, &realm, &self.password) {
-                warn!(self.logger,
-                      "Message integrity check for '{}' is failed: {}",
-                      client,
-                      e);
-                let mut response = request.into_error_response()
-                    .with_error_code(rfc5389::errors::Unauthorized);
+            info!(
+                self.logger,
+                "'{}': username={}, realm={}, nonce={}",
+                client,
+                username.name(),
+                realm.text(),
+                nonce.value()
+            );
+            if let Err(e) = message_integrity.check_long_term_credential(
+                &username,
+                &realm,
+                &self.password,
+            )
+            {
+                warn!(
+                    self.logger,
+                    "Message integrity check for '{}' is failed: {}",
+                    client,
+                    e
+                );
+                let mut response = request.into_error_response().with_error_code(
+                    rfc5389::errors::Unauthorized,
+                );
                 response.add_attribute(self.realm.clone());
                 let nonce = self.random_nonce();
                 info!(self.logger, "New NONCE for '{}': {:?}", client, nonce);
                 response.add_attribute(nonce);
                 return Err(response);
             }
-            info!(self.logger,
-                  "'{}' has the valid 'MESSAGE-INTEGRITY' attribute",
-                  client);
+            info!(
+                self.logger,
+                "'{}' has the valid 'MESSAGE-INTEGRITY' attribute",
+                client
+            );
             Ok(request)
         } else {
-            info!(self.logger,
-                  "'{}' has no 'MESSAGE-INTEGRITY' attribute",
-                  client);
-            let mut response = request.into_error_response()
-                .with_error_code(rfc5389::errors::Unauthorized);
+            info!(
+                self.logger,
+                "'{}' has no 'MESSAGE-INTEGRITY' attribute",
+                client
+            );
+            let mut response = request.into_error_response().with_error_code(
+                rfc5389::errors::Unauthorized,
+            );
             response.add_attribute(self.realm.clone());
             let nonce = self.random_nonce();
             info!(self.logger, "NONCE for '{}': {:?}", client, nonce);
@@ -174,21 +193,24 @@ impl DefaultHandler {
         // 2.
         if self.allocations.contains_key(&client) {
             info!(self.logger, "Existing allocation: {}", client);
-            let response = request.into_error_response()
-                .with_error_code(errors::AllocationMismatch);
+            let response = request.into_error_response().with_error_code(
+                errors::AllocationMismatch,
+            );
             return futures::finished(Err(response)).boxed();
         }
 
         // 3.
         match request.get_attribute::<RequestedTransport>().cloned() {
             None => {
-                let response = request.into_error_response()
-                    .with_error_code(rfc5389::errors::BadRequest);
+                let response = request.into_error_response().with_error_code(
+                    rfc5389::errors::BadRequest,
+                );
                 return futures::finished(Err(response)).boxed();
             }
             Some(a) if !a.is_udp() => {
-                let response = request.into_error_response()
-                    .with_error_code(errors::UnsupportedTransportProtocol);
+                let response = request.into_error_response().with_error_code(
+                    errors::UnsupportedTransportProtocol,
+                );
                 return futures::finished(Err(response)).boxed();
             }
             _ => {}
@@ -197,10 +219,13 @@ impl DefaultHandler {
         // 4.
         if let Some(a) = request.get_attribute::<DontFragment>().cloned() {
             use rustun::Attribute;
-            info!(self.logger,
-                  "This server does not support 'DONT-FRAGMENT' attribute");
-            let mut response = request.into_error_response()
-                .with_error_code(rfc5389::errors::UnknownAttribute);
+            info!(
+                self.logger,
+                "This server does not support 'DONT-FRAGMENT' attribute"
+            );
+            let mut response = request.into_error_response().with_error_code(
+                rfc5389::errors::UnknownAttribute,
+            );
             response.add_attribute(UnknownAttributes::new(vec![a.get_type()]));
             return futures::finished(Err(response)).boxed();
         }
@@ -208,10 +233,13 @@ impl DefaultHandler {
         // 5.
         if let Some(a) = request.get_attribute::<ReservationToken>().cloned() {
             use rustun::Attribute;
-            info!(self.logger,
-                  "This server does not support 'RESERVATION-TOKEN' attribute");
-            let mut response = request.into_error_response()
-                .with_error_code(rfc5389::errors::UnknownAttribute);
+            info!(
+                self.logger,
+                "This server does not support 'RESERVATION-TOKEN' attribute"
+            );
+            let mut response = request.into_error_response().with_error_code(
+                rfc5389::errors::UnknownAttribute,
+            );
             response.add_attribute(UnknownAttributes::new(vec![a.get_type()]));
             return futures::finished(Err(response)).boxed();
         }
@@ -219,10 +247,13 @@ impl DefaultHandler {
         // 6.
         if let Some(a) = request.get_attribute::<EvenPort>().cloned() {
             use rustun::Attribute;
-            info!(self.logger,
-                  "This server does not support 'EVEN-PORT' attribute");
-            let mut response = request.into_error_response()
-                .with_error_code(rfc5389::errors::UnknownAttribute);
+            info!(
+                self.logger,
+                "This server does not support 'EVEN-PORT' attribute"
+            );
+            let mut response = request.into_error_response().with_error_code(
+                rfc5389::errors::UnknownAttribute,
+            );
             response.add_attribute(UnknownAttributes::new(vec![a.get_type()]));
             return futures::finished(Err(response)).boxed();
         }
@@ -242,27 +273,36 @@ impl DefaultHandler {
             .map_err(|e: Error| panic!("Error: {}", e))
             .and_then(move |socket| {
                 let relayed_addr = socket.local_addr().unwrap();
-                info!(logger,
-                      "Creates the allocation for '{}' (relayed_addr='{}')",
-                      client,
-                      relayed_addr);
+                info!(
+                    logger,
+                    "Creates the allocation for '{}' (relayed_addr='{}')",
+                    client,
+                    relayed_addr
+                );
 
                 let mut response = request.into_success_response();
                 response.add_attribute(XorRelayedAddress::new(relayed_addr));
                 response.add_attribute(XorMappedAddress::new(client));
                 response.add_attribute(Lifetime::new(Duration::from_secs(600)));
                 response.add_attribute(Software::new("None".to_string()).unwrap());
-                let mi = MessageIntegrity::new_long_term_credential(&response,
-                                                                    &username,
-                                                                    &realm,
-                                                                    &password)
-                        .unwrap();
+                let mi = MessageIntegrity::new_long_term_credential(
+                    &response,
+                    &username,
+                    &realm,
+                    &password,
+                ).unwrap();
                 response.add_attribute(mi);
                 tx.send(Ok(response)).unwrap();
                 RelayLoop::new(logger, info_tx, forward_rx, client, socket)
             });
         self.spawner.spawn(future);
-        self.allocations.insert(client, Allocation::new(self.logger.clone(), forward_tx));
+        self.allocations.insert(
+            client,
+            Allocation::new(
+                self.logger.clone(),
+                forward_tx,
+            ),
+        );
         rx.map_err(|_| ()).boxed()
     }
     fn handle_refresh(&mut self, client: SocketAddr, request: Request) -> BoxFuture<Response, ()> {
@@ -275,7 +315,8 @@ impl DefaultHandler {
         let username = request.get_attribute::<Username>().cloned().unwrap();
         let realm = request.get_attribute::<Realm>().cloned().unwrap();
 
-        let lifetime = request.get_attribute::<Lifetime>()
+        let lifetime = request
+            .get_attribute::<Lifetime>()
             .cloned()
             .unwrap_or_else(|| Lifetime::new(Duration::from_secs(600)));
         if lifetime.duration().as_secs() == 0 {
@@ -285,18 +326,20 @@ impl DefaultHandler {
         let mut response = request.into_success_response();
         response.add_attribute(Lifetime::new(lifetime.duration()));
         response.add_attribute(Software::new("None".to_string()).unwrap());
-        let mi = MessageIntegrity::new_long_term_credential(&response,
-                                                            &username,
-                                                            &realm,
-                                                            &self.password)
-                .unwrap();
+        let mi = MessageIntegrity::new_long_term_credential(
+            &response,
+            &username,
+            &realm,
+            &self.password,
+        ).unwrap();
         response.add_attribute(mi);
         futures::finished(Ok(response)).boxed()
     }
-    fn handle_create_permission(&mut self,
-                                client: SocketAddr,
-                                request: Request)
-                                -> BoxFuture<Response, ()> {
+    fn handle_create_permission(
+        &mut self,
+        client: SocketAddr,
+        request: Request,
+    ) -> BoxFuture<Response, ()> {
         let request = match self.check_credential(client, request) {
             Err(response) => {
                 return futures::finished(Err(response)).boxed();
@@ -310,27 +353,33 @@ impl DefaultHandler {
         let peer = if let Some(a) = request.get_attribute::<XorPeerAddress>().cloned() {
             a
         } else {
-            warn!(self.logger,
-                  "'{}' has no 'XOR-PEER-ADDRESS' attribute",
-                  client);
-            let response = request.into_error_response()
-                .with_error_code(rfc5389::errors::BadRequest);
+            warn!(
+                self.logger,
+                "'{}' has no 'XOR-PEER-ADDRESS' attribute",
+                client
+            );
+            let response = request.into_error_response().with_error_code(
+                rfc5389::errors::BadRequest,
+            );
             return futures::finished(Err(response)).boxed();
         };
-        info!(self.logger,
-              "New permission installed for '{}': permitted peer is '{}'",
-              client,
-              peer.address());
+        info!(
+            self.logger,
+            "New permission installed for '{}': permitted peer is '{}'",
+            client,
+            peer.address()
+        );
 
         // TODO: install permission
 
         let mut response = request.into_success_response();
         response.add_attribute(Software::new("None".to_string()).unwrap());
-        let mi = MessageIntegrity::new_long_term_credential(&response,
-                                                            &username,
-                                                            &realm,
-                                                            &self.password)
-                .unwrap();
+        let mi = MessageIntegrity::new_long_term_credential(
+            &response,
+            &username,
+            &realm,
+            &self.password,
+        ).unwrap();
         response.add_attribute(mi);
         futures::finished(Ok(response)).boxed()
     }
@@ -353,9 +402,14 @@ impl DefaultHandler {
         // TODO: error handlings
         let peer = indication.get_attribute::<XorPeerAddress>().unwrap();
         assert!(indication.get_attribute::<DontFragment>().is_none());
-        let data = indication.get_attribute::<rfc5766::attributes::Data>().unwrap();
+        let data = indication
+            .get_attribute::<rfc5766::attributes::Data>()
+            .unwrap();
         if let Some(allocation) = self.allocations.get(&client) {
-            allocation.forward_tx.send((peer.address(), data.clone().unwrap())).unwrap();
+            allocation
+                .forward_tx
+                .send((peer.address(), data.clone().unwrap()))
+                .unwrap();
         }
         futures::finished(()).boxed()
     }
@@ -392,10 +446,12 @@ impl HandleMessage for DefaultHandler {
         }
     }
     fn handle_error(&mut self, client: SocketAddr, error: Error) {
-        warn!(self.logger,
-              "Cannot handle a message from the client '{}': {}",
-              client,
-              error);
+        warn!(
+            self.logger,
+            "Cannot handle a message from the client '{}': {}",
+            client,
+            error
+        );
     }
     fn handle_info(&mut self, info: Info) {
         match info {
@@ -434,16 +490,19 @@ pub struct RelayLoop {
     queue: VecDeque<(SocketAddr, Vec<u8>)>,
 }
 impl RelayLoop {
-    fn new(logger: Logger,
-           info_tx: mpsc::Sender<Info>,
-           forward_rx: mpsc::Receiver<(SocketAddr, Vec<u8>)>,
-           client: SocketAddr,
-           socket: UdpSocket)
-           -> Self {
-        info!(logger,
-              "Starts relay loop for '{}' (relayed = '{}')",
-              client,
-              socket.local_addr().unwrap());
+    fn new(
+        logger: Logger,
+        info_tx: mpsc::Sender<Info>,
+        forward_rx: mpsc::Receiver<(SocketAddr, Vec<u8>)>,
+        client: SocketAddr,
+        socket: UdpSocket,
+    ) -> Self {
+        info!(
+            logger,
+            "Starts relay loop for '{}' (relayed = '{}')",
+            client,
+            socket.local_addr().unwrap()
+        );
         RelayLoop {
             logger: logger,
             info_tx: info_tx,
@@ -478,12 +537,14 @@ impl Future for RelayLoop {
                 Ok(Async::Ready(_)) => {
                     self.send = None;
                     if let Some((peer, data)) = self.queue.pop_front() {
-                        debug!(self.logger,
-                               "RELAY: '{}' ='{}'=> '{}' ({} bytes)",
-                               self.client,
-                               self.socket.local_addr().unwrap(),
-                               peer,
-                               data.len());
+                        debug!(
+                            self.logger,
+                            "RELAY: '{}' ='{}'=> '{}' ({} bytes)",
+                            self.client,
+                            self.socket.local_addr().unwrap(),
+                            peer,
+                            data.len()
+                        );
                         self.send = Some(self.socket.clone().send_to(data, peer));
                     } else {
                         break;
@@ -500,13 +561,17 @@ impl Future for RelayLoop {
             Ok(Async::NotReady) => {}
             Ok(Async::Ready((socket, mut buf, size, peer))) => {
                 buf.truncate(size);
-                debug!(self.logger,
-                       "RELAY: '{}' <='{}'= '{} ({} bytes)",
-                       self.client,
-                       self.socket.local_addr().unwrap(),
-                       peer,
-                       buf.len());
-                self.info_tx.send(Info::Data(self.client, peer, buf)).unwrap();
+                debug!(
+                    self.logger,
+                    "RELAY: '{}' <='{}'= '{} ({} bytes)",
+                    self.client,
+                    self.socket.local_addr().unwrap(),
+                    peer,
+                    buf.len()
+                );
+                self.info_tx
+                    .send(Info::Data(self.client, peer, buf))
+                    .unwrap();
                 self.recv = socket.recv_from(vec![0; 10240]);
             }
         }

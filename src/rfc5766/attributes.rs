@@ -34,9 +34,11 @@ impl Attribute for ChannelNumber {
         Type::new(TYPE_CHANNEL_NUMBER)
     }
     fn try_from_raw(attr: &RawAttribute, _message: &RawMessage) -> Result<Self> {
-        track_assert_eq!(attr.get_type().as_u16(),
-                         TYPE_CHANNEL_NUMBER,
-                         ErrorKind::Unsupported);
+        track_assert_eq!(
+            attr.get_type().as_u16(),
+            TYPE_CHANNEL_NUMBER,
+            ErrorKind::Unsupported
+        );
         let number = track_try!((&mut attr.value()).read_u16be());
         Ok(Self::new(number))
     }
@@ -62,9 +64,11 @@ impl Attribute for Lifetime {
         Type::new(TYPE_LIFETIME)
     }
     fn try_from_raw(attr: &RawAttribute, _message: &RawMessage) -> Result<Self> {
-        track_assert_eq!(attr.get_type().as_u16(),
-                         TYPE_LIFETIME,
-                         ErrorKind::Unsupported);
+        track_assert_eq!(
+            attr.get_type().as_u16(),
+            TYPE_LIFETIME,
+            ErrorKind::Unsupported
+        );
         let seconds = track_try!((&mut attr.value()).read_u32be());
         Ok(Self::new(Duration::from_secs(seconds as u64)))
     }
@@ -91,9 +95,11 @@ impl Attribute for XorPeerAddress {
         Type::new(TYPE_XOR_PEER_ADDRESS)
     }
     fn try_from_raw(attr: &RawAttribute, message: &RawMessage) -> Result<Self> {
-        track_assert_eq!(attr.get_type().as_u16(),
-                         TYPE_XOR_PEER_ADDRESS,
-                         ErrorKind::Unsupported);
+        track_assert_eq!(
+            attr.get_type().as_u16(),
+            TYPE_XOR_PEER_ADDRESS,
+            ErrorKind::Unsupported
+        );
         let xor_addr = track_try!(SocketAddrValue::read_from(&mut attr.value()));
         Ok(Self::new(xor_addr.xor(message.transaction_id()).address()))
     }
@@ -149,9 +155,11 @@ impl Attribute for XorRelayedAddress {
         Type::new(TYPE_XOR_RELAYED_ADDRESS)
     }
     fn try_from_raw(attr: &RawAttribute, message: &RawMessage) -> Result<Self> {
-        track_assert_eq!(attr.get_type().as_u16(),
-                         TYPE_XOR_RELAYED_ADDRESS,
-                         ErrorKind::Unsupported);
+        track_assert_eq!(
+            attr.get_type().as_u16(),
+            TYPE_XOR_RELAYED_ADDRESS,
+            ErrorKind::Unsupported
+        );
         let xor_addr = track_try!(SocketAddrValue::read_from(&mut attr.value()));
         Ok(Self::new(xor_addr.xor(message.transaction_id()).address()))
     }
@@ -178,9 +186,11 @@ impl Attribute for EvenPort {
         Type::new(TYPE_EVEN_PORT)
     }
     fn try_from_raw(attr: &RawAttribute, _message: &RawMessage) -> Result<Self> {
-        track_assert_eq!(attr.get_type().as_u16(),
-                         TYPE_EVEN_PORT,
-                         ErrorKind::Unsupported);
+        track_assert_eq!(
+            attr.get_type().as_u16(),
+            TYPE_EVEN_PORT,
+            ErrorKind::Unsupported
+        );
         let flags = track_try!((&mut attr.value()).read_u8());
         Ok(Self::new((flags & 0b1000_0000) != 0))
     }
@@ -214,9 +224,11 @@ impl Attribute for RequestedTransport {
         Type::new(TYPE_REQUESTED_TRANSPORT)
     }
     fn try_from_raw(attr: &RawAttribute, _message: &RawMessage) -> Result<Self> {
-        track_assert_eq!(attr.get_type().as_u16(),
-                         TYPE_REQUESTED_TRANSPORT,
-                         ErrorKind::Unsupported);
+        track_assert_eq!(
+            attr.get_type().as_u16(),
+            TYPE_REQUESTED_TRANSPORT,
+            ErrorKind::Unsupported
+        );
         let protocol = track_try!((&mut attr.value()).read_u8());
         track_assert_eq!(protocol, PROTOCOL_UDP, ErrorKind::Unsupported);
         Ok(Self::new())
@@ -234,9 +246,11 @@ impl Attribute for DontFragment {
         Type::new(TYPE_DONT_FRAGMENT)
     }
     fn try_from_raw(attr: &RawAttribute, _message: &RawMessage) -> Result<Self> {
-        track_assert_eq!(attr.get_type().as_u16(),
-                         TYPE_DONT_FRAGMENT,
-                         ErrorKind::Unsupported);
+        track_assert_eq!(
+            attr.get_type().as_u16(),
+            TYPE_DONT_FRAGMENT,
+            ErrorKind::Unsupported
+        );
         Ok(DontFragment)
     }
     fn encode_value(&self, _message: &RawMessage) -> Result<Vec<u8>> {
@@ -259,9 +273,11 @@ impl Attribute for ReservationToken {
         Type::new(TYPE_RESERVATION_TOKEN)
     }
     fn try_from_raw(attr: &RawAttribute, _message: &RawMessage) -> Result<Self> {
-        track_assert_eq!(attr.get_type().as_u16(),
-                         TYPE_RESERVATION_TOKEN,
-                         ErrorKind::Unsupported);
+        track_assert_eq!(
+            attr.get_type().as_u16(),
+            TYPE_RESERVATION_TOKEN,
+            ErrorKind::Unsupported
+        );
         let token = track_try!((&mut attr.value()).read_u64be());
         Ok(Self::new(token))
     }
