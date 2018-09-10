@@ -1,13 +1,13 @@
-use std::net::SocketAddr;
-use std::time::Duration;
-use std::ops::Deref;
-use rustun::Attribute;
-use rustun::attribute::{Type, RawAttribute};
+use handy_async::sync_io::{ReadExt, WriteExt};
+use rustun::attribute::{RawAttribute, Type};
 use rustun::message::RawMessage;
 use rustun::types::SocketAddrValue;
-use handy_async::sync_io::{ReadExt, WriteExt};
+use rustun::Attribute;
+use std::net::SocketAddr;
+use std::ops::Deref;
+use std::time::Duration;
 
-use {Result, ErrorKind};
+use {ErrorKind, Result};
 
 pub const TYPE_CHANNEL_NUMBER: u16 = 0x000C;
 pub const TYPE_LIFETIME: u16 = 0x000D;
@@ -78,7 +78,6 @@ impl Attribute for Lifetime {
         Ok(buf)
     }
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct XorPeerAddress(SocketAddr);

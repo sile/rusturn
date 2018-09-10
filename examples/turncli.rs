@@ -5,16 +5,16 @@ extern crate rusturn;
 #[macro_use]
 extern crate trackable;
 
-use std::net::SocketAddr;
 use clap::{App, Arg};
 use fibers::{Executor, InPlaceExecutor, Spawn};
-use rustun::{Client, Method, Error};
-use rustun::message::{Request, Response, Message};
 use rustun::client::UdpClient;
-use rustun::rfc5389::attributes::{Realm, Username, Nonce, MessageIntegrity};
-use rusturn::Attribute;
-use rusturn::rfc5766::methods::{Allocate, CreatePermission};
+use rustun::message::{Message, Request, Response};
+use rustun::rfc5389::attributes::{MessageIntegrity, Nonce, Realm, Username};
+use rustun::{Client, Error, Method};
 use rusturn::rfc5766::attributes::{RequestedTransport, XorPeerAddress};
+use rusturn::rfc5766::methods::{Allocate, CreatePermission};
+use rusturn::Attribute;
+use std::net::SocketAddr;
 
 fn main() {
     let matches = App::new("turncli")
@@ -64,8 +64,8 @@ fn main() {
     request.add_attribute(realm.clone());
     request.add_attribute(nonce.clone());
     request.add_attribute(RequestedTransport::new());
-    let mi = MessageIntegrity::new_long_term_credential(&request, &username, &realm, password)
-        .unwrap();
+    let mi =
+        MessageIntegrity::new_long_term_credential(&request, &username, &realm, password).unwrap();
     request.add_attribute(mi);
 
     let response = track_try_unwrap!(call(&mut executor, &mut client, request.clone()));
@@ -81,8 +81,8 @@ fn main() {
     request.add_attribute(realm.clone());
     request.add_attribute(nonce);
     request.add_attribute(peer);
-    let mi = MessageIntegrity::new_long_term_credential(&request, &username, &realm, password)
-        .unwrap();
+    let mi =
+        MessageIntegrity::new_long_term_credential(&request, &username, &realm, password).unwrap();
     request.add_attribute(mi);
 
     let response = track_try_unwrap!(call(&mut executor, &mut client, request.clone()));

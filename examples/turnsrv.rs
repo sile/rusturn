@@ -1,17 +1,17 @@
 extern crate clap;
 #[macro_use]
 extern crate slog;
-extern crate slog_term;
 extern crate fibers;
 extern crate rustun;
 extern crate rusturn;
+extern crate slog_term;
 
-use std::net::SocketAddr;
 use clap::{App, Arg};
-use slog::{Logger, DrainExt, Record, LevelFilter};
 use fibers::{Executor, InPlaceExecutor, Spawn};
-use rustun::server::{UdpServer, TcpServer};
+use rustun::server::{TcpServer, UdpServer};
 use rusturn::server::DefaultHandler;
+use slog::{DrainExt, LevelFilter, Logger, Record};
+use std::net::SocketAddr;
 
 fn main() {
     let matches = App::new("turnsrv")

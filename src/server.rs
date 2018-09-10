@@ -1,26 +1,26 @@
-use std::time::Duration;
-use std::net::{SocketAddr, IpAddr};
-use std::collections::{HashMap, VecDeque};
-use rand;
-use slog::{self, Logger};
-use fibers::{Spawn, BoxSpawn};
-use fibers::net::UdpSocket;
 use fibers::net::futures::{RecvFrom, SendTo};
+use fibers::net::UdpSocket;
 use fibers::sync::mpsc;
 use fibers::sync::oneshot;
-use futures::{self, Future, Poll, Async, Stream};
-use rustun::{self, HandleMessage, Method as StunMethod};
-use rustun::server::IndicationSender;
+use fibers::{BoxSpawn, Spawn};
+use futures::{self, Async, Future, Poll, Stream};
+use rand;
 use rustun::message::Message;
 use rustun::rfc5389;
-use rustun::rfc5389::attributes::{XorMappedAddress, MessageIntegrity, Username, Nonce, Realm};
-use rustun::rfc5389::attributes::{UnknownAttributes, Software};
+use rustun::rfc5389::attributes::{MessageIntegrity, Nonce, Realm, Username, XorMappedAddress};
+use rustun::rfc5389::attributes::{Software, UnknownAttributes};
+use rustun::server::IndicationSender;
+use rustun::{self, HandleMessage, Method as StunMethod};
+use slog::{self, Logger};
+use std::collections::{HashMap, VecDeque};
+use std::net::{IpAddr, SocketAddr};
+use std::time::Duration;
 
-use {Error, Method, Attribute, BoxFuture};
 use rfc5766;
+use rfc5766::attributes::{DontFragment, EvenPort, RequestedTransport, ReservationToken};
+use rfc5766::attributes::{Lifetime, XorPeerAddress, XorRelayedAddress};
 use rfc5766::errors;
-use rfc5766::attributes::{RequestedTransport, DontFragment, ReservationToken, EvenPort};
-use rfc5766::attributes::{Lifetime, XorRelayedAddress, XorPeerAddress};
+use {Attribute, BoxFuture, Error, Method};
 
 type Request = rustun::message::Request<Method, Attribute>;
 type Indication = rustun::message::Indication<Method, Attribute>;
@@ -97,27 +97,27 @@ impl DefaultHandler {
                 a
             } else {
                 warn!(self.logger, "'{}' has no 'USERNAME' attribute", client);
-                let response = request.into_error_response().with_error_code(
-                    rfc5389::errors::BadRequest,
-                );
+                let response = request
+                    .into_error_response()
+                    .with_error_code(rfc5389::errors::BadRequest);
                 return Err(response);
             };
             let realm = if let Some(a) = request.get_attribute::<Realm>().cloned() {
                 a
             } else {
                 warn!(self.logger, "'{}' has no 'REALM' attribute", client);
-                let response = request.into_error_response().with_error_code(
-                    rfc5389::errors::BadRequest,
-                );
+                let response = request
+                    .into_error_response()
+                    .with_error_code(rfc5389::errors::BadRequest);
                 return Err(response);
             };
             let nonce = if let Some(a) = request.get_attribute::<Nonce>().cloned() {
                 a
             } else {
                 warn!(self.logger, "'{}' has no 'NONCE' attribute", client);
-                let response = request.into_error_response().with_error_code(
-                    rfc5389::errors::BadRequest,
-                );
+                let response = request
+                    .into_error_response()
+                    .with_error_code(rfc5389::errors::BadRequest);
                 return Err(response);
             };
             // TODO: "stale nonce" check
@@ -130,21 +130,16 @@ impl DefaultHandler {
                 realm.text(),
                 nonce.value()
             );
-            if let Err(e) = message_integrity.check_long_term_credential(
-                &username,
-                &realm,
-                &self.password,
-            )
+            if let Err(e) =
+                message_integrity.check_long_term_credential(&username, &realm, &self.password)
             {
                 warn!(
                     self.logger,
-                    "Message integrity check for '{}' is failed: {}",
-                    client,
-                    e
+                    "Message integrity check for '{}' is failed: {}", client, e
                 );
-                let mut response = request.into_error_response().with_error_code(
-                    rfc5389::errors::Unauthorized,
-                );
+                let mut response = request
+                    .into_error_response()
+                    .with_error_code(rfc5389::errors::Unauthorized);
                 response.add_attribute(self.realm.clone());
                 let nonce = self.random_nonce();
                 info!(self.logger, "New NONCE for '{}': {:?}", client, nonce);
@@ -153,19 +148,17 @@ impl DefaultHandler {
             }
             info!(
                 self.logger,
-                "'{}' has the valid 'MESSAGE-INTEGRITY' attribute",
-                client
+                "'{}' has the valid 'MESSAGE-INTEGRITY' attribute", client
             );
             Ok(request)
         } else {
             info!(
                 self.logger,
-                "'{}' has no 'MESSAGE-INTEGRITY' attribute",
-                client
+                "'{}' has no 'MESSAGE-INTEGRITY' attribute", client
             );
-            let mut response = request.into_error_response().with_error_code(
-                rfc5389::errors::Unauthorized,
-            );
+            let mut response = request
+                .into_error_response()
+                .with_error_code(rfc5389::errors::Unauthorized);
             response.add_attribute(self.realm.clone());
             let nonce = self.random_nonce();
             info!(self.logger, "NONCE for '{}': {:?}", client, nonce);
@@ -193,24 +186,24 @@ impl DefaultHandler {
         // 2.
         if self.allocations.contains_key(&client) {
             info!(self.logger, "Existing allocation: {}", client);
-            let response = request.into_error_response().with_error_code(
-                errors::AllocationMismatch,
-            );
+            let response = request
+                .into_error_response()
+                .with_error_code(errors::AllocationMismatch);
             return Box::new(futures::finished(Err(response)));
         }
 
         // 3.
         match request.get_attribute::<RequestedTransport>().cloned() {
             None => {
-                let response = request.into_error_response().with_error_code(
-                    rfc5389::errors::BadRequest,
-                );
+                let response = request
+                    .into_error_response()
+                    .with_error_code(rfc5389::errors::BadRequest);
                 return Box::new(futures::finished(Err(response)));
             }
             Some(a) if !a.is_udp() => {
-                let response = request.into_error_response().with_error_code(
-                    errors::UnsupportedTransportProtocol,
-                );
+                let response = request
+                    .into_error_response()
+                    .with_error_code(errors::UnsupportedTransportProtocol);
                 return Box::new(futures::finished(Err(response)));
             }
             _ => {}
@@ -223,9 +216,9 @@ impl DefaultHandler {
                 self.logger,
                 "This server does not support 'DONT-FRAGMENT' attribute"
             );
-            let mut response = request.into_error_response().with_error_code(
-                rfc5389::errors::UnknownAttribute,
-            );
+            let mut response = request
+                .into_error_response()
+                .with_error_code(rfc5389::errors::UnknownAttribute);
             response.add_attribute(UnknownAttributes::new(vec![a.get_type()]));
             return Box::new(futures::finished(Err(response)));
         }
@@ -237,9 +230,9 @@ impl DefaultHandler {
                 self.logger,
                 "This server does not support 'RESERVATION-TOKEN' attribute"
             );
-            let mut response = request.into_error_response().with_error_code(
-                rfc5389::errors::UnknownAttribute,
-            );
+            let mut response = request
+                .into_error_response()
+                .with_error_code(rfc5389::errors::UnknownAttribute);
             response.add_attribute(UnknownAttributes::new(vec![a.get_type()]));
             return Box::new(futures::finished(Err(response)));
         }
@@ -251,9 +244,9 @@ impl DefaultHandler {
                 self.logger,
                 "This server does not support 'EVEN-PORT' attribute"
             );
-            let mut response = request.into_error_response().with_error_code(
-                rfc5389::errors::UnknownAttribute,
-            );
+            let mut response = request
+                .into_error_response()
+                .with_error_code(rfc5389::errors::UnknownAttribute);
             response.add_attribute(UnknownAttributes::new(vec![a.get_type()]));
             return Box::new(futures::finished(Err(response)));
         }
@@ -275,9 +268,7 @@ impl DefaultHandler {
                 let relayed_addr = socket.local_addr().unwrap();
                 info!(
                     logger,
-                    "Creates the allocation for '{}' (relayed_addr='{}')",
-                    client,
-                    relayed_addr
+                    "Creates the allocation for '{}' (relayed_addr='{}')", client, relayed_addr
                 );
 
                 let mut response = request.into_success_response();
@@ -286,23 +277,15 @@ impl DefaultHandler {
                 response.add_attribute(Lifetime::new(Duration::from_secs(600)));
                 response.add_attribute(Software::new("None".to_string()).unwrap());
                 let mi = MessageIntegrity::new_long_term_credential(
-                    &response,
-                    &username,
-                    &realm,
-                    &password,
+                    &response, &username, &realm, &password,
                 ).unwrap();
                 response.add_attribute(mi);
                 tx.send(Ok(response)).unwrap();
                 RelayLoop::new(logger, info_tx, forward_rx, client, socket)
             });
         self.spawner.spawn(future);
-        self.allocations.insert(
-            client,
-            Allocation::new(
-                self.logger.clone(),
-                forward_tx,
-            ),
-        );
+        self.allocations
+            .insert(client, Allocation::new(self.logger.clone(), forward_tx));
         Box::new(rx.map_err(|_| ()))
     }
     fn handle_refresh(&mut self, client: SocketAddr, request: Request) -> BoxFuture<Response, ()> {
@@ -355,12 +338,11 @@ impl DefaultHandler {
         } else {
             warn!(
                 self.logger,
-                "'{}' has no 'XOR-PEER-ADDRESS' attribute",
-                client
+                "'{}' has no 'XOR-PEER-ADDRESS' attribute", client
             );
-            let response = request.into_error_response().with_error_code(
-                rfc5389::errors::BadRequest,
-            );
+            let response = request
+                .into_error_response()
+                .with_error_code(rfc5389::errors::BadRequest);
             return Box::new(futures::finished(Err(response)));
         };
         info!(
@@ -448,9 +430,7 @@ impl HandleMessage for DefaultHandler {
     fn handle_error(&mut self, client: SocketAddr, error: Error) {
         warn!(
             self.logger,
-            "Cannot handle a message from the client '{}': {}",
-            client,
-            error
+            "Cannot handle a message from the client '{}': {}", client, error
         );
     }
     fn handle_info(&mut self, info: Info) {

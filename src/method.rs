@@ -1,6 +1,6 @@
-use rustun::Method as StunMethod;
-use rustun::types::U12;
 use rustun::rfc5389;
+use rustun::types::U12;
+use rustun::Method as StunMethod;
 
 use rfc5766;
 

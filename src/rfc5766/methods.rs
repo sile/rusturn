@@ -1,6 +1,6 @@
-use rustun::Method;
 use rustun::method;
 use rustun::types::U12;
+use rustun::Method;
 
 pub const METHOD_ALLOCATE: u16 = 0x003;
 pub const METHOD_REFRESH: u16 = 0x004;

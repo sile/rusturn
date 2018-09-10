@@ -1,12 +1,12 @@
-use rustun::Attribute as StunAttribute;
+use rustun::attribute::{RawAttribute, Type};
 use rustun::message::RawMessage;
-use rustun::attribute::{Type, RawAttribute};
-use rustun::types::TryAsRef;
 use rustun::rfc5389;
+use rustun::types::TryAsRef;
+use rustun::Attribute as StunAttribute;
 use trackable::error::ErrorKindExt;
 
-use {Result, ErrorKind};
 use rfc5766;
+use {ErrorKind, Result};
 
 macro_rules! impl_attr_from {
     ($rfc:ident, $attr:ident) => {
@@ -15,12 +15,12 @@ macro_rules! impl_attr_from {
                 Attribute::$attr(f)
             }
         }
-    }
+    };
 }
 macro_rules! impl_attr_try_as_ref {
     ($rfc:ident, $attr:ident) => {
         impl TryAsRef<$rfc::attributes::$attr> for Attribute {
-            fn try_as_ref(&self) -> Option<& $rfc::attributes::$attr> {
+            fn try_as_ref(&self) -> Option<&$rfc::attributes::$attr> {
                 if let Attribute::$attr(ref a) = *self {
                     Some(a)
                 } else {
@@ -28,7 +28,7 @@ macro_rules! impl_attr_try_as_ref {
                 }
             }
         }
-    }
+    };
 }
 
 /// Attribute set that are used in [RFC 5766](https://tools.ietf.org/html/rfc5766).
@@ -183,11 +183,9 @@ impl StunAttribute for Attribute {
             rfc5766::attributes::TYPE_RESERVATION_TOKEN => {
                 rfc5766::attributes::ReservationToken::try_from_raw(attr, message).map(From::from)
             }
-            t => Err(
-                ErrorKind::Unsupported
-                    .cause(format!("Unknown attribute: type={}", t))
-                    .into(),
-            ),
+            t => Err(ErrorKind::Unsupported
+                .cause(format!("Unknown attribute: type={}", t))
+                .into()),
         }
     }
     fn encode_value(&self, message: &RawMessage) -> Result<Vec<u8>> {
