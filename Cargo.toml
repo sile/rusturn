@@ -4,14 +4,12 @@ version = "0.0.1"
 authors = ["Takeru Ohta <phjgt308@gmail.com>"]
 
 [dependencies]
-slog = "1"
-rand = "0.3"
-rustun = "0.1"
 fibers = "0.1"
 futures = "0.1"
+rand = "0.5"
+rustun = "0.2"
+stun_codec = "0.1"
 trackable = "0.2"
-handy_async = "0.2"
 
 [dev-dependencies]
 clap = "2"
-slog-term = "1"
