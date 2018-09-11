@@ -28,19 +28,24 @@ use rusturn::client::Client;
 
 fn main() -> Result<(), trackable::error::MainError> {
     let server_addr = track_any_err!("127.0.0.1:3478".parse())?;
-    let mut client = track!(fibers_global::execute(Client::new_udp(server_addr)))?;
+    let mut client = track!(fibers_global::execute(Client::udp_allocate(
+        server_addr,
+        "foo".to_owned(),
+        "bar".to_owned()
+    )))?;
+    // let mut client = track!(fibers_global::execute(Client::new_udp(server_addr)))?;
 
-    let future = client.allocate("foo", "bar");
-    fibers_global::spawn(
-        client
-            .for_each(|m| {
-                println!("# RECV: {:?}", m);
-                Ok(())
-            })
-            .map_err(|e| panic!("{}", e)),
-    );
-    let response = fibers_global::execute(future);
-    println!("# RESPONSE: {:?}", response);
+    // let future = client.allocate("foo", "bar");
+    // fibers_global::spawn(
+    //     client
+    //         .for_each(|m| {
+    //             println!("# RECV: {:?}", m);
+    //             Ok(())
+    //         })
+    //         .map_err(|e| panic!("{}", e)),
+    // );
+    // let response = fibers_global::execute(future);
+    // println!("# RESPONSE: {:?}", response);
     Ok(())
     // let matches = App::new("turncli")
     //     .arg(Arg::with_name("TCP").long("tcp"))
