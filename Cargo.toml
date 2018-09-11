@@ -13,3 +13,4 @@ trackable = "0.2"
 
 [dev-dependencies]
 clap = "2"
+fibers_global = "0.1"
