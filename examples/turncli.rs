@@ -33,6 +33,18 @@ fn main() -> Result<(), trackable::error::MainError> {
         "foo".to_owned(),
         "bar".to_owned()
     )))?;
+
+    // client.refresh(None)?; //TODO: remove
+    let peer = "127.0.0.1:2000".parse().unwrap();
+    // client.create_permission(peer)?;
+    // client.send(peer, vec![b'f', b'o', b'o'])?;
+
+    client.channel_bind(peer)?;
+
+    fibers_global::execute(client.for_each(|m| {
+        println!("# M: {:?}", m);
+        Ok(())
+    }))?;
     // let mut client = track!(fibers_global::execute(Client::new_udp(server_addr)))?;
 
     // let future = client.allocate("foo", "bar");

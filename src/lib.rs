@@ -1,7 +1,10 @@
+#[macro_use]
+extern crate bytecodec;
 extern crate fibers;
 extern crate futures;
 extern crate rand;
 extern crate rustun;
+#[macro_use]
 extern crate stun_codec;
 #[macro_use]
 extern crate trackable;
@@ -9,6 +12,8 @@ extern crate trackable;
 pub use rustun::{Error, ErrorKind, Result};
 
 //pub mod server;
+pub mod attribute;
+pub mod channel_data;
 pub mod client;
 pub mod types;
 
