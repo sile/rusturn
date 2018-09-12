@@ -15,6 +15,7 @@ pub use rustun::{Error, ErrorKind, Result};
 pub mod attribute;
 pub mod channel_data;
 pub mod client;
+pub mod transport;
 pub mod types;
 
 pub const DEFAULT_LIFETIME_SECONDS: u64 = 10 * 60;
