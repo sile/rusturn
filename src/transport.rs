@@ -1,33 +1,69 @@
 use bytecodec::{self, ByteCount, Decode, Encode, EncodeExt, Eos, SizedEncode};
+use fibers::net::TcpStream;
 use fibers::sync::mpsc;
+use futures::Future;
 use futures::{Async, Stream};
 use rustun;
-use rustun::transport::{RetransmitTransporter, StunTransport, Transport, UnreliableTransport};
-use std::fmt;
-use std::net::SocketAddr;
-use stun_codec::{
-    BrokenMessage as StunBrokenMessage, Message as StunMessage,
-    MessageDecoder as StunMessageDecoder, MessageEncoder as StunMessageEncoder, TransactionId,
+use rustun::transport::{
+    RetransmitTransporter, StunTransport, TcpTransporter, Transport, UdpTransporter,
+    UnreliableTransport,
 };
+use std::net::SocketAddr;
+use stun_codec as stun;
+use stun_codec::TransactionId;
 
 use attribute::Attribute;
 use channel_data::{ChannelData, ChannelDataDecoder, ChannelDataEncoder};
-use Result;
+use {Error, Result};
 
-pub fn udp_transporters() -> (StunUdpTransporter, ChannelDataUdpTransporter) {
-    panic!()
+pub fn udp_transporters(
+    bind_addr: SocketAddr,
+) -> impl Future<Item = (StunUdpTransporter, ChannelDataUdpTransporter), Error = Error> {
+    track_err!(UdpTransporter::bind(bind_addr)).map(|transporter| {
+        let (handle, relayer) = TransporterHandle::new();
+        let stun = StunUdpTransporter(RetransmitTransporter::new(handle));
+        let channel_data = ChannelDataTransporter {
+            relayer,
+            transporter,
+        };
+        (stun, channel_data)
+    })
 }
 
-pub fn tcp_transporters() -> (StunTcpTransporter, ChannelDataTcpTransporter) {
-    panic!()
+pub fn tcp_client_transporters(
+    server_addr: SocketAddr,
+) -> impl Future<Item = (StunTcpTransporter, ChannelDataTcpTransporter), Error = Error> {
+    track_err!(TcpTransporter::connect(server_addr)).map(|transporter| {
+        let (handle, relayer) = TransporterHandle::new();
+        let stun = StunTcpTransporter(handle);
+        let channel_data = ChannelDataTransporter {
+            relayer,
+            transporter,
+        };
+        (stun, channel_data)
+    })
 }
 
+pub fn tcp_server_transporters(
+    stream: TcpStream,
+) -> Result<(StunTcpTransporter, ChannelDataTcpTransporter)> {
+    let transporter = track!(TcpTransporter::from_stream(stream))?;
+    let (handle, relayer) = TransporterHandle::new();
+    let stun = StunTcpTransporter(handle);
+    let channel_data = ChannelDataTransporter {
+        relayer,
+        transporter,
+    };
+    Ok((stun, channel_data))
+}
+
+#[derive(Debug)]
 pub struct Relayer<T: Transport> {
-    send_rx: mpsc::Receiver<(SocketAddr, <T::Encoder as Encode>::Item)>,
-    recv_tx: mpsc::Sender<(SocketAddr, <T::Decoder as Decode>::Item)>,
+    send_rx: mpsc::Receiver<(SocketAddr, T::SendItem)>,
+    recv_tx: mpsc::Sender<(SocketAddr, T::RecvItem)>,
 }
 impl<T: Transport> Relayer<T> {
-    pub fn recv_from_handle(&mut self) -> Option<(SocketAddr, <T::Encoder as Encode>::Item)> {
+    pub fn recv_from_handle(&mut self) -> Option<(SocketAddr, T::SendItem)> {
         if let Ok(Async::Ready(Some(item))) = self.send_rx.poll() {
             Some(item)
         } else {
@@ -35,19 +71,15 @@ impl<T: Transport> Relayer<T> {
         }
     }
 
-    pub fn send_to_handle(&mut self, item: (SocketAddr, <T::Decoder as Decode>::Item)) {
+    pub fn send_to_handle(&mut self, item: (SocketAddr, T::RecvItem)) {
         let _ = self.recv_tx.send(item);
     }
 }
-impl<T: Transport> fmt::Debug for Relayer<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Relayer {{ .. }}")
-    }
-}
 
+#[derive(Debug)]
 pub struct TransporterHandle<T: Transport> {
-    send_tx: mpsc::Sender<(SocketAddr, <T::Encoder as Encode>::Item)>,
-    recv_rx: mpsc::Receiver<(SocketAddr, <T::Decoder as Decode>::Item)>,
+    send_tx: mpsc::Sender<(SocketAddr, T::SendItem)>,
+    recv_rx: mpsc::Receiver<(SocketAddr, T::RecvItem)>,
 }
 impl<T: Transport> TransporterHandle<T> {
     pub fn new() -> (Self, Relayer<T>) {
@@ -59,14 +91,14 @@ impl<T: Transport> TransporterHandle<T> {
     }
 }
 impl<T: Transport> Transport for TransporterHandle<T> {
-    type Decoder = T::Decoder;
-    type Encoder = T::Encoder;
+    type SendItem = T::SendItem;
+    type RecvItem = T::RecvItem;
 
-    fn send(&mut self, peer: SocketAddr, message: <Self::Encoder as Encode>::Item) {
+    fn send(&mut self, peer: SocketAddr, message: Self::SendItem) {
         let _ = self.send_tx.send((peer, message));
     }
 
-    fn recv(&mut self) -> Option<(SocketAddr, <Self::Decoder as Decode>::Item)> {
+    fn recv(&mut self) -> Option<(SocketAddr, Self::RecvItem)> {
         match self.recv_rx.poll().expect("never fails") {
             Async::NotReady => None,
             Async::Ready(None) => None,
@@ -79,23 +111,18 @@ impl<T: Transport> Transport for TransporterHandle<T> {
     }
 }
 impl<T: UnreliableTransport> UnreliableTransport for TransporterHandle<T> {}
-impl<T: Transport> fmt::Debug for TransporterHandle<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "TransporterHandle {{ .. }}")
-    }
-}
 
 #[derive(Debug)]
 pub struct StunTcpTransporter(TransporterHandle<rustun::transport::StunTcpTransporter<Attribute>>);
 impl Transport for StunTcpTransporter {
-    type Decoder = StunMessageDecoder<Attribute>;
-    type Encoder = StunMessageEncoder<Attribute>;
+    type SendItem = stun::Message<Attribute>;
+    type RecvItem = stun::DecodedMessage<Attribute>;
 
-    fn send(&mut self, peer: SocketAddr, message: <Self::Encoder as Encode>::Item) {
+    fn send(&mut self, peer: SocketAddr, message: Self::SendItem) {
         self.0.send(peer, message);
     }
 
-    fn recv(&mut self) -> Option<(SocketAddr, <Self::Decoder as Decode>::Item)> {
+    fn recv(&mut self) -> Option<(SocketAddr, Self::RecvItem)> {
         self.0.recv()
     }
 
@@ -113,21 +140,21 @@ pub struct StunUdpTransporter(
         Attribute,
         TransporterHandle<
             rustun::transport::UdpTransporter<
-                StunMessageDecoder<Attribute>,
-                StunMessageEncoder<Attribute>,
+                stun::MessageEncoder<Attribute>,
+                stun::MessageDecoder<Attribute>,
             >,
         >,
     >,
 );
 impl Transport for StunUdpTransporter {
-    type Decoder = StunMessageDecoder<Attribute>;
-    type Encoder = StunMessageEncoder<Attribute>;
+    type SendItem = stun::Message<Attribute>;
+    type RecvItem = stun::DecodedMessage<Attribute>;
 
-    fn send(&mut self, peer: SocketAddr, message: <Self::Encoder as Encode>::Item) {
+    fn send(&mut self, peer: SocketAddr, message: Self::SendItem) {
         self.0.send(peer, message);
     }
 
-    fn recv(&mut self) -> Option<(SocketAddr, <Self::Decoder as Decode>::Item)> {
+    fn recv(&mut self) -> Option<(SocketAddr, Self::RecvItem)> {
         self.0.recv()
     }
 
@@ -143,37 +170,40 @@ impl StunTransport<Attribute> for StunUdpTransporter {
 
 pub type ChannelDataTcpTransporter = ChannelDataTransporter<
     rustun::transport::StunTcpTransporter<Attribute>,
-    rustun::transport::TcpTransporter<TurnMessageDecoder, TurnMessageEncoder>,
+    rustun::transport::TcpTransporter<TurnMessageEncoder, TurnMessageDecoder>,
 >;
 
 pub type ChannelDataUdpTransporter = ChannelDataTransporter<
-    rustun::transport::UdpTransporter<StunMessageDecoder<Attribute>, StunMessageEncoder<Attribute>>,
-    rustun::transport::UdpTransporter<TurnMessageDecoder, TurnMessageEncoder>,
+    rustun::transport::UdpTransporter<
+        stun::MessageEncoder<Attribute>,
+        stun::MessageDecoder<Attribute>,
+    >,
+    rustun::transport::UdpTransporter<TurnMessageEncoder, TurnMessageDecoder>,
 >;
 
 #[derive(Debug)]
 pub struct ChannelDataTransporter<S, T>
 where
-    S: Transport<Decoder = StunMessageDecoder<Attribute>, Encoder = StunMessageEncoder<Attribute>>,
-    T: Transport<Decoder = TurnMessageDecoder, Encoder = TurnMessageEncoder>,
+    S: Transport<SendItem = stun::Message<Attribute>, RecvItem = stun::DecodedMessage<Attribute>>,
+    T: Transport<SendItem = TurnMessage, RecvItem = TurnMessage>,
 {
     relayer: Relayer<S>,
     transporter: T,
 }
 impl<S, T> Transport for ChannelDataTransporter<S, T>
 where
-    S: Transport<Decoder = StunMessageDecoder<Attribute>, Encoder = StunMessageEncoder<Attribute>>,
-    T: Transport<Decoder = TurnMessageDecoder, Encoder = TurnMessageEncoder>,
+    S: Transport<SendItem = stun::Message<Attribute>, RecvItem = stun::DecodedMessage<Attribute>>,
+    T: Transport<SendItem = TurnMessage, RecvItem = TurnMessage>,
 {
-    type Decoder = ChannelDataDecoder;
-    type Encoder = ChannelDataEncoder;
+    type SendItem = ChannelData;
+    type RecvItem = ChannelData;
 
-    fn send(&mut self, peer: SocketAddr, message: <Self::Encoder as Encode>::Item) {
+    fn send(&mut self, peer: SocketAddr, message: Self::SendItem) {
         self.transporter
             .send(peer, TurnMessage::ChannelData(message));
     }
 
-    fn recv(&mut self) -> Option<(SocketAddr, <Self::Decoder as Decode>::Item)> {
+    fn recv(&mut self) -> Option<(SocketAddr, Self::RecvItem)> {
         match self.transporter.recv() {
             None => None,
             Some((peer, TurnMessage::Stun(x))) => {
@@ -195,7 +225,7 @@ where
 
 #[derive(Debug)]
 pub enum TurnMessageDecoder {
-    Stun(StunMessageDecoder<Attribute>),
+    Stun(stun::MessageDecoder<Attribute>),
     ChannelData(ChannelDataDecoder),
     None,
 }
@@ -255,7 +285,7 @@ impl Decode for TurnMessageDecoder {
 
 //#[derive(Debug)]
 pub enum TurnMessageEncoder {
-    Stun(StunMessageEncoder<Attribute>),
+    Stun(stun::MessageEncoder<Attribute>),
     ChannelData(ChannelDataEncoder),
     None,
 }
@@ -308,7 +338,7 @@ impl SizedEncode for TurnMessageEncoder {
 
 #[derive(Debug)]
 pub enum TurnMessage {
-    Stun(StunMessage<Attribute>),
-    BrokenStun(StunBrokenMessage),
+    Stun(stun::Message<Attribute>),
+    BrokenStun(stun::BrokenMessage),
     ChannelData(ChannelData),
 }
