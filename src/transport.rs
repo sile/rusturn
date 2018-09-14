@@ -219,6 +219,9 @@ where
     }
 
     fn run_once(&mut self) -> Result<bool> {
+        while let Some((peer, message)) = self.relayer.recv_from_handle() {
+            self.transporter.send(peer, TurnMessage::Stun(message));
+        }
         track!(self.transporter.run_once())
     }
 }
@@ -283,7 +286,7 @@ impl Decode for TurnMessageDecoder {
     }
 }
 
-//#[derive(Debug)]
+#[derive(Debug)]
 pub enum TurnMessageEncoder {
     Stun(stun::MessageEncoder<Attribute>),
     ChannelData(ChannelDataEncoder),
@@ -306,10 +309,7 @@ impl Encode for TurnMessageEncoder {
     }
 
     fn start_encoding(&mut self, item: Self::Item) -> bytecodec::Result<()> {
-        if let TurnMessageEncoder::None = *self {
-        } else {
-            track_panic!(bytecodec::ErrorKind::EncoderFull);
-        }
+        track_assert!(self.is_idle(), bytecodec::ErrorKind::EncoderFull);
         *self = match item {
             TurnMessage::Stun(t) => track!(EncodeExt::with_item(t).map(TurnMessageEncoder::Stun))?,
             TurnMessage::BrokenStun(t) => {

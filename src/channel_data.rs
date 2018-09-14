@@ -8,6 +8,10 @@ pub const MAX_CHANNEL_NUMBER: u16 = 0x7FFF;
 
 pub const CHANNEL_LIFETIME_SECONDS: u64 = 10 * 60;
 
+// TODO:
+#[derive(Debug)]
+pub struct ChannelNumber(pub u16);
+
 #[derive(Debug)]
 pub struct ChannelData {
     channel_number: u16, // TODO: type
