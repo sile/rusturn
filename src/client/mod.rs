@@ -1,6 +1,5 @@
 use futures::{self, Async, Future, Poll};
 use rustun::message::{MessageError, Response};
-use rustun::transport::Transport;
 use std;
 use std::fmt;
 use std::net::SocketAddr;
@@ -8,7 +7,6 @@ use std::net::SocketAddr;
 use self::core::ClientCore;
 use attribute::Attribute;
 use auth::AuthParams;
-use channel_data::ChannelNumber;
 use transport::{
     self, ChannelDataTcpTransporter, ChannelDataUdpTransporter, StunTcpTransporter,
     StunUdpTransporter,
@@ -18,30 +16,42 @@ use {AsyncResult, Error, Result};
 mod allocate;
 mod core;
 
-pub struct StunTransaction(
-    Box<dyn Future<Item = Response<Attribute>, Error = MessageError> + Send + 'static>,
+pub struct StunTransaction<T = Response<Attribute>>(
+    Box<dyn Future<Item = T, Error = MessageError> + Send + 'static>,
 );
-impl StunTransaction {
+impl StunTransaction<Response<Attribute>> {
     pub fn new<F>(future: F) -> Self
     where
         F: Future<Item = Response<Attribute>, Error = MessageError> + Send + 'static,
     {
-        StunTransaction(Box::new(future))
-    }
-
-    pub fn empty() -> Self {
-        Self::new(futures::empty())
+        StunTransaction(Box::new(future.fuse()))
     }
 }
-impl Future for StunTransaction {
-    type Item = Response<Attribute>;
+impl StunTransaction<(SocketAddr, Response<Attribute>)> {
+    pub fn with_peer<F>(peer: SocketAddr, future: F) -> Self
+    where
+        F: Future<Item = Response<Attribute>, Error = MessageError> + Send + 'static,
+    {
+        StunTransaction(Box::new(future.map(move |item| (peer, item)).fuse()))
+    }
+}
+impl<T> StunTransaction<T>
+where
+    T: Send + 'static,
+{
+    pub fn empty() -> Self {
+        StunTransaction(Box::new(futures::empty()))
+    }
+}
+impl<T> Future for StunTransaction<T> {
+    type Item = T;
     type Error = MessageError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         self.0.poll()
     }
 }
-impl fmt::Debug for StunTransaction {
+impl<T> fmt::Debug for StunTransaction<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "StunTransaction(_)")
     }
@@ -49,16 +59,19 @@ impl fmt::Debug for StunTransaction {
 
 pub trait Client {
     fn create_permission(&mut self, peer: SocketAddr) -> AsyncResult<()>;
-    fn channel_bind(&mut self, peer: SocketAddr) -> AsyncResult<ChannelNumber>;
+    fn channel_bind(&mut self, peer: SocketAddr) -> AsyncResult<()>;
     fn send_data(&mut self, peer: SocketAddr, data: Vec<u8>) -> Result<()>;
-    fn send_channel_data(&mut self, channel_number: ChannelNumber, data: Vec<u8>) -> Result<()>;
+    fn send_channel_data(&mut self, peer: SocketAddr, data: Vec<u8>) -> Result<()>;
     fn recv_data(&mut self) -> Option<(SocketAddr, Vec<u8>)>;
     fn run_once(&mut self) -> Result<()>;
 
-    fn wait<F: Future>(self, future: F) -> Wait<Self, F>
+    fn wait<FN, FUT>(mut self, f: FN) -> Wait<Self, FUT>
     where
         Self: Sized,
+        FN: FnOnce(&mut Self) -> FUT,
+        FUT: Future,
     {
+        let future = f(&mut self);
         Wait {
             client: Some(self),
             future,
@@ -111,8 +124,7 @@ impl TcpClient {
                     server_addr,
                     auth_params
                 ))
-            })
-            .map(TcpClient)
+            }).map(TcpClient)
     }
 }
 impl Client for TcpClient {
@@ -120,7 +132,7 @@ impl Client for TcpClient {
         self.0.create_permission(peer)
     }
 
-    fn channel_bind(&mut self, peer: SocketAddr) -> AsyncResult<ChannelNumber> {
+    fn channel_bind(&mut self, peer: SocketAddr) -> AsyncResult<()> {
         self.0.channel_bind(peer)
     }
 
@@ -128,8 +140,8 @@ impl Client for TcpClient {
         self.0.send_data(peer, data)
     }
 
-    fn send_channel_data(&mut self, channel_number: ChannelNumber, data: Vec<u8>) -> Result<()> {
-        self.0.send_channel_data(channel_number, data)
+    fn send_channel_data(&mut self, peer: SocketAddr, data: Vec<u8>) -> Result<()> {
+        self.0.send_channel_data(peer, data)
     }
 
     fn recv_data(&mut self) -> Option<(SocketAddr, Vec<u8>)> {
@@ -157,8 +169,7 @@ impl UdpClient {
                     server_addr,
                     auth_params
                 ))
-            })
-            .map(UdpClient)
+            }).map(UdpClient)
     }
 }
 impl Client for UdpClient {
@@ -166,7 +177,7 @@ impl Client for UdpClient {
         self.0.create_permission(peer)
     }
 
-    fn channel_bind(&mut self, peer: SocketAddr) -> AsyncResult<ChannelNumber> {
+    fn channel_bind(&mut self, peer: SocketAddr) -> AsyncResult<()> {
         self.0.channel_bind(peer)
     }
 
@@ -174,8 +185,8 @@ impl Client for UdpClient {
         self.0.send_data(peer, data)
     }
 
-    fn send_channel_data(&mut self, channel_number: ChannelNumber, data: Vec<u8>) -> Result<()> {
-        self.0.send_channel_data(channel_number, data)
+    fn send_channel_data(&mut self, peer: SocketAddr, data: Vec<u8>) -> Result<()> {
+        self.0.send_channel_data(peer, data)
     }
 
     fn recv_data(&mut self) -> Option<(SocketAddr, Vec<u8>)> {

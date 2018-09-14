@@ -1,4 +1,4 @@
-use bytecodec::{self, ByteCount, Decode, Encode, EncodeExt, Eos, SizedEncode};
+use bytecodec::{self, ByteCount, Decode, DecodeExt, Encode, EncodeExt, Eos, SizedEncode};
 use fibers::net::TcpStream;
 use fibers::sync::mpsc;
 use futures::Future;
@@ -8,13 +8,98 @@ use rustun::transport::{
     RetransmitTransporter, StunTransport, TcpTransporter, Transport, UdpTransporter,
     UnreliableTransport,
 };
+use std::collections::HashSet;
 use std::net::SocketAddr;
 use stun_codec as stun;
 use stun_codec::TransactionId;
 
 use attribute::Attribute;
 use channel_data::{ChannelData, ChannelDataDecoder, ChannelDataEncoder};
+use client::Client;
 use {Error, Result};
+
+#[derive(Debug)]
+pub struct UdpOverTurnTransporter<C, E, D> {
+    client: C,
+    encoder: E,
+    decoder: D,
+    channels: HashSet<SocketAddr>,
+    last_error: Option<Error>,
+}
+impl<C, E, D> UdpOverTurnTransporter<C, E, D>
+where
+    C: Client,
+    E: Encode + Default,
+    D: Decode + Default,
+{
+    pub fn new(client: C) -> Self {
+        UdpOverTurnTransporter {
+            client,
+            encoder: E::default(),
+            decoder: D::default(),
+            channels: HashSet::new(),
+            last_error: None,
+        }
+    }
+
+    fn ensure_channel_exists(&mut self, peer: SocketAddr) {
+        if self.channels.insert(peer) {
+            self.client.channel_bind(peer);
+        }
+    }
+}
+impl<C, E, D> Transport for UdpOverTurnTransporter<C, E, D>
+where
+    C: Client,
+    E: Encode + Default,
+    D: Decode + Default,
+{
+    type SendItem = E::Item;
+    type RecvItem = D::Item;
+
+    fn send(&mut self, peer: SocketAddr, message: Self::SendItem) {
+        if self.last_error.is_some() {
+            return;
+        }
+
+        self.ensure_channel_exists(peer);
+        if let Err(e) = track!(self.encoder.encode_into_bytes(message).map_err(Error::from))
+            .and_then(|data| track!(self.client.send_channel_data(peer, data)))
+        {
+            self.last_error = Some(Error::from(e));
+        }
+    }
+
+    fn recv(&mut self) -> Option<(SocketAddr, Self::RecvItem)> {
+        if self.last_error.is_some() {
+            None
+        } else if let Some((peer, data)) = self.client.recv_data() {
+            match track!(self.decoder.decode_from_bytes(&data)) {
+                Err(e) => {
+                    self.last_error = Some(Error::from(e));
+                    None
+                }
+                Ok(item) => Some((peer, item)),
+            }
+        } else {
+            None
+        }
+    }
+
+    fn run_once(&mut self) -> Result<bool> {
+        if let Some(e) = self.last_error.take() {
+            return Err(e);
+        }
+        track!(self.client.run_once())?;
+        Ok(false)
+    }
+}
+impl<C, E, D> UnreliableTransport for UdpOverTurnTransporter<C, E, D>
+where
+    C: Client,
+    E: Encode + Default,
+    D: Decode + Default,
+{}
 
 pub fn udp_transporters(
     bind_addr: SocketAddr,

@@ -6,6 +6,7 @@ authors = ["Takeru Ohta <phjgt308@gmail.com>"]
 [dependencies]
 bytecodec = "0.4"
 fibers = "0.1"
+fibers_timeout_queue = "0.1"
 futures = "0.1"
 rand = "0.5"
 rustun = "0.2"
@@ -15,3 +16,4 @@ trackable = "0.2"
 [dev-dependencies]
 clap = "2"
 fibers_global = "0.1"
+structopt = "0.2"

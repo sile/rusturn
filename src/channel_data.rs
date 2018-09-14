@@ -8,14 +8,14 @@ pub const MAX_CHANNEL_NUMBER: u16 = 0x7FFF;
 
 pub const CHANNEL_LIFETIME_SECONDS: u64 = 10 * 60;
 
-// TODO:
-#[derive(Debug)]
+// TODO: move to `stun_codec`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ChannelNumber(pub u16);
 
 #[derive(Debug)]
 pub struct ChannelData {
-    channel_number: u16, // TODO: type
-    data: Vec<u8>,
+    pub channel_number: u16, // TODO: type
+    pub data: Vec<u8>,
 }
 impl ChannelData {
     pub fn new(channel_number: u16, data: Vec<u8>) -> Self {

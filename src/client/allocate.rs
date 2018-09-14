@@ -9,8 +9,8 @@ use super::core::ClientCore;
 use super::StunTransaction;
 use attribute::Attribute;
 use auth::AuthParams;
-use channel_data::{ChannelData, ChannelNumber};
-use {AsyncResult, Error, ErrorKind, Result};
+use channel_data::ChannelData;
+use {Error, ErrorKind, Result};
 
 const TRANSPORT_PROTOCOL_UDP: u8 = 17;
 
