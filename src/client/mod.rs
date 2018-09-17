@@ -1,3 +1,6 @@
+use fibers_transport::{
+    FixedPeerTransporter, RcTransporter, TcpTransport, TcpTransporter, UdpTransport, UdpTransporter,
+};
 use futures::{self, Async, Future, Poll};
 use rustun::message::{MessageError, Response};
 use std;
@@ -8,7 +11,7 @@ use self::core::ClientCore;
 use attribute::Attribute;
 use auth::AuthParams;
 use transport::{
-    self, ChannelDataTcpTransporter, ChannelDataUdpTransporter, StunTcpTransporter,
+    ChannelDataTcpTransporter, ChannelDataUdpTransporter, StunTcpTransporter, StunTransporter,
     StunUdpTransporter,
 };
 use {AsyncResult, Error, Result};
@@ -63,7 +66,10 @@ pub trait Client {
     fn send_data(&mut self, peer: SocketAddr, data: Vec<u8>) -> Result<()>;
     fn send_channel_data(&mut self, peer: SocketAddr, data: Vec<u8>) -> Result<()>;
     fn recv_data(&mut self) -> Option<(SocketAddr, Vec<u8>)>;
+
+    // TODO: poll_xxx
     fn run_once(&mut self) -> Result<()>;
+    fn local_addr(&self) -> SocketAddr;
 
     fn wait<FN, FUT>(mut self, f: FN) -> Wait<Self, FUT>
     where
@@ -116,17 +122,17 @@ impl TcpClient {
         server_addr: SocketAddr,
         auth_params: AuthParams,
     ) -> impl Future<Item = Self, Error = Error> {
-        track_err!(transport::tcp_client_transporters(server_addr))
-            .and_then(move |(stun, channel_data)| {
-                track_err!(ClientCore::allocate(
-                    stun,
-                    channel_data,
-                    server_addr,
-                    auth_params
-                ))
+        TcpTransporter::connect(server_addr)
+            .map_err(|e| track!(Error::from(e)))
+            .and_then(move |transporter| {
+                let transporter = RcTransporter::new(transporter);
+                let stun = StunTcpTransporter::new(StunTransporter::new(transporter.clone()));
+                let channel_data = ChannelDataTcpTransporter::new(transporter);
+                track_err!(ClientCore::allocate(stun, channel_data, auth_params))
             }).map(TcpClient)
     }
 }
+unsafe impl Send for TcpClient {}
 impl Client for TcpClient {
     fn create_permission(&mut self, peer: SocketAddr) -> AsyncResult<()> {
         self.0.create_permission(peer)
@@ -151,27 +157,43 @@ impl Client for TcpClient {
     fn run_once(&mut self) -> Result<()> {
         self.0.run_once()
     }
+
+    fn local_addr(&self) -> SocketAddr {
+        self.0
+            .stun_channel_ref()
+            .transporter_ref()
+            .inner_ref()
+            .with_inner_ref(|x| x.local_addr())
+    }
 }
 
 #[derive(Debug)]
-pub struct UdpClient(ClientCore<StunUdpTransporter, ChannelDataUdpTransporter>);
+pub struct UdpClient(
+    ClientCore<
+        FixedPeerTransporter<StunUdpTransporter, ()>,
+        FixedPeerTransporter<ChannelDataUdpTransporter, ()>,
+    >,
+);
 impl UdpClient {
     pub fn allocate(
         server_addr: SocketAddr,
         auth_params: AuthParams,
     ) -> impl Future<Item = Self, Error = Error> {
         let bind_addr = "0.0.0.0:0".parse().expect("never fails");
-        track_err!(transport::udp_transporters(bind_addr))
-            .and_then(move |(stun, channel_data)| {
-                track_err!(ClientCore::allocate(
-                    stun,
-                    channel_data,
-                    server_addr,
-                    auth_params
-                ))
+
+        UdpTransporter::bind(bind_addr)
+            .map_err(|e| track!(Error::from(e)))
+            .and_then(move |transporter| {
+                let transporter = RcTransporter::new(transporter);
+                let stun = StunUdpTransporter::new(StunTransporter::new(transporter.clone()));
+                let stun = FixedPeerTransporter::new((), server_addr, stun);
+                let channel_data = ChannelDataUdpTransporter::new(transporter);
+                let channel_data = FixedPeerTransporter::new((), server_addr, channel_data);
+                track_err!(ClientCore::allocate(stun, channel_data, auth_params))
             }).map(UdpClient)
     }
 }
+unsafe impl Send for UdpClient {}
 impl Client for UdpClient {
     fn create_permission(&mut self, peer: SocketAddr) -> AsyncResult<()> {
         self.0.create_permission(peer)
@@ -195,5 +217,14 @@ impl Client for UdpClient {
 
     fn run_once(&mut self) -> Result<()> {
         self.0.run_once()
+    }
+
+    fn local_addr(&self) -> SocketAddr {
+        self.0
+            .stun_channel_ref()
+            .transporter_ref()
+            .inner_ref()
+            .inner_ref()
+            .with_inner_ref(|x| x.local_addr())
     }
 }

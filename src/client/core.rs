@@ -1,8 +1,9 @@
 use fibers_timeout_queue::TimeoutQueue;
-use futures::{Async, Future, Stream};
+use fibers_transport::Transport;
+use futures::{Async, Future};
 use rustun::channel::{Channel as StunChannel, RecvMessage};
 use rustun::message::{ErrorResponse, Indication, Request, Response};
-use rustun::transport::{StunTransport, Transport};
+use rustun::transport::StunTransport;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::net::{IpAddr, SocketAddr};
@@ -10,7 +11,6 @@ use std::time::Duration;
 use stun_codec::{rfc5389, rfc5766};
 
 use super::allocate::Allocate;
-use super::Client;
 use super::StunTransaction;
 use attribute::Attribute;
 use auth::AuthParams;
@@ -23,10 +23,9 @@ const CHANNEL_LIFETIME_SECONDS: u64 = PERMISSION_LIFETIME_SECONDS; // FIXME: Use
 #[derive(Debug)]
 pub struct ClientCore<S, C>
 where
-    S: StunTransport<Attribute>,
-    C: Transport<SendItem = ChannelData, RecvItem = ChannelData>,
+    S: StunTransport<Attribute, PeerAddr = ()>,
+    C: Transport<PeerAddr = (), SendItem = ChannelData, RecvItem = ChannelData>,
 {
-    server_addr: SocketAddr,
     stun_channel: StunChannel<Attribute, S>,
     channel_data_transporter: C,
     auth_params: AuthParams,
@@ -42,17 +41,15 @@ where
 }
 impl<S, C> ClientCore<S, C>
 where
-    S: StunTransport<Attribute> + 'static,
-    C: Transport<SendItem = ChannelData, RecvItem = ChannelData>,
+    S: StunTransport<Attribute, PeerAddr = ()> + 'static,
+    C: Transport<PeerAddr = (), SendItem = ChannelData, RecvItem = ChannelData>,
 {
     pub fn allocate(
         stun_transporter: S,
         channel_data_transporter: C,
-        server_addr: SocketAddr,
         auth_params: AuthParams,
     ) -> Allocate<S, C> {
         Allocate::new(
-            server_addr,
             StunChannel::new(stun_transporter),
             channel_data_transporter,
             auth_params,
@@ -60,7 +57,6 @@ where
     }
 
     pub fn new(
-        server_addr: SocketAddr,
         stun_channel: StunChannel<Attribute, S>,
         channel_data_transporter: C,
         auth_params: AuthParams,
@@ -69,7 +65,6 @@ where
         let mut timeout_queue = TimeoutQueue::new();
         timeout_queue.push(TimeoutEntry::Refresh, lifetime * 10 / 9);
         ClientCore {
-            server_addr,
             stun_channel,
             channel_data_transporter,
             auth_params,
@@ -85,6 +80,10 @@ where
         }
     }
 
+    pub fn stun_channel_ref(&self) -> &StunChannel<Attribute, S> {
+        &self.stun_channel
+    }
+
     fn start_refresh(&mut self) -> Result<()> {
         let lifetime = track!(rfc5766::attributes::Lifetime::new(self.lifetime))?;
 
@@ -92,8 +91,7 @@ where
         request.add_attribute(lifetime.into());
         track!(self.auth_params.add_auth_attributes(&mut request))?;
 
-        self.refresh_transaction =
-            StunTransaction::new(self.stun_channel.call(self.server_addr, request));
+        self.refresh_transaction = StunTransaction::new(self.stun_channel.call((), request));
         Ok(())
     }
 
@@ -302,7 +300,7 @@ where
         track!(self.auth_params.add_auth_attributes(&mut request))?;
 
         self.create_permission_transaction =
-            StunTransaction::with_peer(peer, self.stun_channel.call(self.server_addr, request));
+            StunTransaction::with_peer(peer, self.stun_channel.call((), request));
         Ok(())
     }
 
@@ -319,7 +317,7 @@ where
         track!(self.auth_params.add_auth_attributes(&mut request))?;
 
         self.channel_bind_transaction =
-            StunTransaction::with_peer(peer, self.stun_channel.call(self.server_addr, request));
+            StunTransaction::with_peer(peer, self.stun_channel.call((), request));
         Ok(())
     }
 
@@ -333,13 +331,8 @@ where
         }
         ChannelNumber(n)
     }
-}
-impl<S, C> Client for ClientCore<S, C>
-where
-    S: StunTransport<Attribute> + 'static,
-    C: Transport<SendItem = ChannelData, RecvItem = ChannelData>,
-{
-    fn create_permission(&mut self, peer: SocketAddr) -> AsyncResult<()> {
+
+    pub fn create_permission(&mut self, peer: SocketAddr) -> AsyncResult<()> {
         let (result, reply) = AsyncResult::new();
         match track!(self.create_permission_inner(peer)) {
             Err(e) => {
@@ -352,7 +345,7 @@ where
         result
     }
 
-    fn channel_bind(&mut self, peer: SocketAddr) -> AsyncResult<()> {
+    pub fn channel_bind(&mut self, peer: SocketAddr) -> AsyncResult<()> {
         let (result, reply) = AsyncResult::new();
         let channel_number = self.next_channel_number();
         match track!(self.channel_bind_inner(peer, channel_number)) {
@@ -372,49 +365,47 @@ where
         result
     }
 
-    fn send_data(&mut self, peer: SocketAddr, data: Vec<u8>) -> Result<()> {
+    pub fn send_data(&mut self, peer: SocketAddr, data: Vec<u8>) -> Result<()> {
         track_assert!(self.permissions.contains_key(&peer.ip()), ErrorKind::Other; peer);
 
         let mut indication = Indication::new(rfc5766::methods::SEND);
         indication.add_attribute(rfc5766::attributes::XorPeerAddress::new(peer).into());
         indication.add_attribute(track!(rfc5766::attributes::Data::new(data))?.into());
-        self.stun_channel.cast(self.server_addr, indication);
+        track!(self.stun_channel.cast((), indication))?;
 
         Ok(())
     }
 
-    fn send_channel_data(&mut self, peer: SocketAddr, data: Vec<u8>) -> Result<()> {
+    pub fn send_channel_data(&mut self, peer: SocketAddr, data: Vec<u8>) -> Result<()> {
         let state = track_assert_some!(self.channels.get(&peer), ErrorKind::Other; peer);
         let data = ChannelData {
             channel_number: state.channel_number().0,
             data,
         };
-        self.channel_data_transporter.send(self.server_addr, data);
+        track!(self.channel_data_transporter.start_send((), data))?;
         Ok(())
     }
 
-    fn recv_data(&mut self) -> Option<(SocketAddr, Vec<u8>)> {
+    pub fn recv_data(&mut self) -> Option<(SocketAddr, Vec<u8>)> {
         self.recv_data_queue.pop_front()
     }
 
-    fn run_once(&mut self) -> Result<()> {
+    pub fn run_once(&mut self) -> Result<()> {
         let mut did_something = true;
         while did_something {
             did_something = false;
 
-            while let Async::Ready(message) = track!(self.stun_channel.poll())? {
+            while let Async::Ready((_peer, message)) = track!(self.stun_channel.poll_recv())? {
                 did_something = true;
-                if let Some((server, message)) = message {
-                    track_assert_eq!(server, self.server_addr, ErrorKind::Other; message);
-                    track!(self.handle_stun_message(message))?;
+                track!(self.handle_stun_message(message))?;
+            }
+            while let Async::Ready(data) = track!(self.channel_data_transporter.poll_recv())? {
+                did_something = true;
+                if let Some((_peer, data)) = data {
+                    track!(self.handle_channel_data(data))?;
                 } else {
                     track_panic!(ErrorKind::Other, "Unexpected termination");
                 }
-            }
-            while let Some((server, data)) = self.channel_data_transporter.recv() {
-                did_something = true;
-                track_assert_eq!(server, self.server_addr, ErrorKind::Other);
-                track!(self.handle_channel_data(data))?;
             }
             while let Some(entry) = self.timeout_queue.pop() {
                 did_something = true;
@@ -434,9 +425,7 @@ where
                 did_something = true;
                 track!(self.handle_channel_bind_response(peer, response))?;
             }
-            if track!(self.channel_data_transporter.run_once())? {
-                track_panic!(ErrorKind::Other, "Unexpected termination");
-            }
+            track!(self.channel_data_transporter.poll_send())?;
         }
         Ok(())
     }

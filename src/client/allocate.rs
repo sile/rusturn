@@ -1,8 +1,8 @@
-use futures::{Async, Future, Poll, Stream};
+use fibers_transport::Transport;
+use futures::{Async, Future, Poll};
 use rustun::channel::Channel as StunChannel;
 use rustun::message::{Request, Response};
-use rustun::transport::{StunTransport, Transport};
-use std::net::SocketAddr;
+use rustun::transport::StunTransport;
 use stun_codec::{rfc5389, rfc5766};
 
 use super::core::ClientCore;
@@ -15,8 +15,10 @@ use {Error, ErrorKind, Result};
 const TRANSPORT_PROTOCOL_UDP: u8 = 17;
 
 #[derive(Debug)]
-pub struct Allocate<S, C> {
-    server_addr: SocketAddr,
+pub struct Allocate<S, C>
+where
+    S: StunTransport<Attribute, PeerAddr = ()>,
+{
     stun_channel: Option<StunChannel<Attribute, S>>,
     channel_data_transporter: Option<C>,
     auth_params: AuthParams,
@@ -24,17 +26,15 @@ pub struct Allocate<S, C> {
 }
 impl<S, C> Allocate<S, C>
 where
-    S: StunTransport<Attribute> + 'static,
-    C: Transport<SendItem = ChannelData, RecvItem = ChannelData>,
+    S: StunTransport<Attribute, PeerAddr = ()> + 'static,
+    C: Transport<PeerAddr = (), SendItem = ChannelData, RecvItem = ChannelData>,
 {
     pub fn new(
-        server_addr: SocketAddr,
         stun_channel: StunChannel<Attribute, S>,
         channel_data_transporter: C,
         auth_params: AuthParams,
     ) -> Self {
         Allocate {
-            server_addr,
             stun_channel: Some(stun_channel),
             channel_data_transporter: Some(channel_data_transporter),
             auth_params,
@@ -56,7 +56,7 @@ where
             self.stun_channel
                 .as_mut()
                 .expect("never fails")
-                .call(self.server_addr, request),
+                .call((), request),
         ));
         Ok(())
     }
@@ -82,7 +82,6 @@ where
 
                 let lifetime = track_assert_some!(lifetime, ErrorKind::Other; response);
                 let client = ClientCore::new(
-                    self.server_addr,
                     self.stun_channel.take().expect("never fails"),
                     self.channel_data_transporter.take().expect("never fails"),
                     self.auth_params.clone(),
@@ -131,8 +130,8 @@ where
 }
 impl<S, C> Future for Allocate<S, C>
 where
-    S: StunTransport<Attribute> + 'static,
-    C: Transport<SendItem = ChannelData, RecvItem = ChannelData>,
+    S: StunTransport<Attribute, PeerAddr = ()> + 'static,
+    C: Transport<PeerAddr = (), SendItem = ChannelData, RecvItem = ChannelData>,
 {
     type Item = ClientCore<S, C>;
     type Error = Error;
@@ -147,19 +146,17 @@ where
                 track!(self.start_allocate())?;
             }
 
-            if let Async::Ready(Some(message)) = track!(self.stun_channel_mut().poll())? {
+            if let Async::Ready(message) = track!(self.stun_channel_mut().poll_recv())? {
                 track_panic!(
                     ErrorKind::Other,
                     "Unexpected message reception: {:?}",
                     message
                 );
             }
-            if let Some(data) = self.channel_data_transporter_mut().recv() {
+            if let Async::Ready(data) = track!(self.channel_data_transporter_mut().poll_recv())? {
                 track_panic!(ErrorKind::Other, "Unexpected data reception: {:?}", data);
             }
-            if track!(self.channel_data_transporter_mut().run_once())? {
-                track_panic!(ErrorKind::Other, "Unexpected termination");
-            }
+            track!(self.channel_data_transporter_mut().poll_send())?;
 
             if let Async::Ready(Some(response)) = track!(self.allocate_transaction.poll())? {
                 did_something = true;
@@ -171,3 +168,4 @@ where
         Ok(Async::NotReady)
     }
 }
+unsafe impl<S, C> Send for Allocate<S, C> where S: StunTransport<Attribute, PeerAddr = ()> {}

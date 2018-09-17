@@ -11,7 +11,7 @@ extern crate trackable;
 use rustun::channel::Channel;
 use rustun::client::Client as StunClient;
 use rustun::message::Request;
-use rustun::transport::RetransmitTransporter;
+use rustun::transport::StunUdpTransporter;
 use rusturn::auth::AuthParams;
 use rusturn::client::UdpClient;
 use rusturn::transport::UdpOverTurnTransporter;
@@ -52,7 +52,7 @@ fn main() -> Result<(), trackable::error::MainError> {
     let transporter =
         UdpOverTurnTransporter::<_, MessageEncoder<_>, MessageDecoder<_>>::new(turn_client);
 
-    let stun_channel = Channel::new(RetransmitTransporter::new(transporter));
+    let stun_channel = Channel::new(StunUdpTransporter::new(transporter));
     let stun_client = StunClient::new(&fibers_global::handle(), stun_channel);
 
     let request = Request::<rfc5389::Attribute>::new(rfc5389::methods::BINDING);

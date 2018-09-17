@@ -19,6 +19,13 @@ where
     pub fn new(inner: RcTransporter<T>) -> Self {
         StunTransporter { inner }
     }
+
+    pub fn with_inner_ref<F, U>(&self, f: F) -> U
+    where
+        F: FnOnce(&T) -> U,
+    {
+        self.inner.with_inner_ref(f)
+    }
 }
 impl<T> Transport for StunTransporter<T>
 where
