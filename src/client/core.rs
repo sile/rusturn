@@ -389,10 +389,14 @@ where
         while did_something {
             did_something = false;
 
-            while let Async::Ready((_, message)) = track!(self.stun_channel.poll_recv())? {
+            while let Async::Ready(message) = track!(self.stun_channel.poll_recv())? {
                 did_something = true;
-                if let Some((peer, data)) = track!(self.handle_stun_message(message))? {
-                    return Ok(Async::Ready(Some((peer, data))));
+                if let Some((_, message)) = message {
+                    if let Some((peer, data)) = track!(self.handle_stun_message(message))? {
+                        return Ok(Async::Ready(Some((peer, data))));
+                    }
+                } else {
+                    track_panic!(ErrorKind::Other, "Unexpected termination");
                 }
             }
             while let Async::Ready(data) = track!(self.channel_data_transporter.poll_recv())? {

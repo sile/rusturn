@@ -5,6 +5,7 @@ authors = ["Takeru Ohta <phjgt308@gmail.com>"]
 
 [dependencies]
 bytecodec = "0.4"
+factory = "0.1"
 fibers = "0.1"
 fibers_timeout_queue = "0.1"
 fibers_transport = "0.1"
