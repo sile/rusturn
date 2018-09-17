@@ -1,93 +1,49 @@
 use fibers_transport::{
     FixedPeerTransporter, RcTransporter, TcpTransport, TcpTransporter, UdpTransport, UdpTransporter,
 };
-use futures::{self, Async, Future, Poll};
-use rustun::message::{MessageError, Response};
+use futures::{Async, Future, Poll};
 use std;
-use std::fmt;
 use std::net::SocketAddr;
 
 use self::core::ClientCore;
-use attribute::Attribute;
 use auth::AuthParams;
 use transport::{
     ChannelDataTcpTransporter, ChannelDataUdpTransporter, StunTcpTransporter, StunTransporter,
     StunUdpTransporter,
 };
-use {AsyncResult, Error, Result};
+use {AsyncResult, Error, ErrorKind, Result};
 
 mod allocate;
 mod core;
-
-pub struct StunTransaction<T = Response<Attribute>>(
-    Box<dyn Future<Item = T, Error = MessageError> + Send + 'static>,
-);
-impl StunTransaction<Response<Attribute>> {
-    pub fn new<F>(future: F) -> Self
-    where
-        F: Future<Item = Response<Attribute>, Error = MessageError> + Send + 'static,
-    {
-        StunTransaction(Box::new(future.fuse()))
-    }
-}
-impl StunTransaction<(SocketAddr, Response<Attribute>)> {
-    pub fn with_peer<F>(peer: SocketAddr, future: F) -> Self
-    where
-        F: Future<Item = Response<Attribute>, Error = MessageError> + Send + 'static,
-    {
-        StunTransaction(Box::new(future.map(move |item| (peer, item)).fuse()))
-    }
-}
-impl<T> StunTransaction<T>
-where
-    T: Send + 'static,
-{
-    pub fn empty() -> Self {
-        StunTransaction(Box::new(futures::empty()))
-    }
-}
-impl<T> Future for StunTransaction<T> {
-    type Item = T;
-    type Error = MessageError;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        self.0.poll()
-    }
-}
-impl<T> fmt::Debug for StunTransaction<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "StunTransaction(_)")
-    }
-}
+mod stun_transaction;
 
 pub trait Client {
     fn create_permission(&mut self, peer: SocketAddr) -> AsyncResult<()>;
     fn channel_bind(&mut self, peer: SocketAddr) -> AsyncResult<()>;
-    fn send_data(&mut self, peer: SocketAddr, data: Vec<u8>) -> Result<()>;
-    fn send_channel_data(&mut self, peer: SocketAddr, data: Vec<u8>) -> Result<()>;
-    fn recv_data(&mut self) -> Option<(SocketAddr, Vec<u8>)>;
-
-    // TODO: poll_xxx
-    fn run_once(&mut self) -> Result<()>;
+    fn start_send(&mut self, peer: SocketAddr, data: Vec<u8>) -> Result<()>;
+    fn poll_send(&mut self) -> Poll<(), Error>;
+    fn poll_recv(&mut self) -> Poll<Option<(SocketAddr, Vec<u8>)>, Error>;
     fn local_addr(&self) -> SocketAddr;
+}
 
-    // TODO: function
-    fn wait<FN, FUT>(mut self, f: FN) -> Wait<Self, FUT>
-    where
-        Self: Sized,
-        FN: FnOnce(&mut Self) -> FUT,
-        FUT: Future,
-    {
-        let future = f(&mut self);
-        Wait {
-            client: Some(self),
-            future,
-        }
+pub fn wait<C, FN, FU>(
+    mut client: C,
+    f: FN,
+) -> impl Future<Item = (C, std::result::Result<FU::Item, FU::Error>), Error = Error>
+where
+    C: Client,
+    FN: FnOnce(&mut C) -> FU,
+    FU: Future,
+{
+    let future = f(&mut client);
+    Wait {
+        client: Some(client),
+        future,
     }
 }
 
 #[derive(Debug)]
-pub struct Wait<T, F> {
+struct Wait<T, F> {
     client: Option<T>,
     future: F,
 }
@@ -100,8 +56,16 @@ impl<T: Client, F: Future> Future for Wait<T, F> {
             self.client
                 .as_mut()
                 .expect("Cannot Wait poll twice")
-                .run_once()
+                .poll_send()
         )?;
+        if let Async::Ready(item) = track!(
+            self.client
+                .as_mut()
+                .expect("Cannot Wait poll twice")
+                .poll_recv()
+        )? {
+            track_panic!(ErrorKind::Other, "Unexpected reception: {:?}", item);
+        }
         match self.future.poll() {
             Err(e) => Ok(Async::Ready((
                 self.client.take().expect("never fails"),
@@ -143,20 +107,16 @@ impl Client for TcpClient {
         self.0.channel_bind(peer)
     }
 
-    fn send_data(&mut self, peer: SocketAddr, data: Vec<u8>) -> Result<()> {
-        self.0.send_data(peer, data)
+    fn start_send(&mut self, peer: SocketAddr, data: Vec<u8>) -> Result<()> {
+        self.0.start_send(peer, data)
     }
 
-    fn send_channel_data(&mut self, peer: SocketAddr, data: Vec<u8>) -> Result<()> {
-        self.0.send_channel_data(peer, data)
+    fn poll_send(&mut self) -> Poll<(), Error> {
+        self.0.poll_send()
     }
 
-    fn recv_data(&mut self) -> Option<(SocketAddr, Vec<u8>)> {
-        self.0.recv_data()
-    }
-
-    fn run_once(&mut self) -> Result<()> {
-        self.0.run_once()
+    fn poll_recv(&mut self) -> Poll<Option<(SocketAddr, Vec<u8>)>, Error> {
+        self.0.poll_recv()
     }
 
     fn local_addr(&self) -> SocketAddr {
@@ -204,20 +164,16 @@ impl Client for UdpClient {
         self.0.channel_bind(peer)
     }
 
-    fn send_data(&mut self, peer: SocketAddr, data: Vec<u8>) -> Result<()> {
-        self.0.send_data(peer, data)
+    fn start_send(&mut self, peer: SocketAddr, data: Vec<u8>) -> Result<()> {
+        self.0.start_send(peer, data)
     }
 
-    fn send_channel_data(&mut self, peer: SocketAddr, data: Vec<u8>) -> Result<()> {
-        self.0.send_channel_data(peer, data)
+    fn poll_send(&mut self) -> Poll<(), Error> {
+        self.0.poll_send()
     }
 
-    fn recv_data(&mut self) -> Option<(SocketAddr, Vec<u8>)> {
-        self.0.recv_data()
-    }
-
-    fn run_once(&mut self) -> Result<()> {
-        self.0.run_once()
+    fn poll_recv(&mut self) -> Poll<Option<(SocketAddr, Vec<u8>)>, Error> {
+        self.0.poll_recv()
     }
 
     fn local_addr(&self) -> SocketAddr {

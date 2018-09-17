@@ -9,7 +9,7 @@ extern crate trackable;
 
 use futures::{Async, Future, Poll};
 use rusturn::auth::AuthParams;
-use rusturn::client::{Client, UdpClient};
+use rusturn::client::{wait, Client, UdpClient};
 use rusturn::Error;
 use std::io::Read;
 use std::net::SocketAddr;
@@ -54,12 +54,11 @@ fn main() -> Result<(), trackable::error::MainError> {
 
     let use_channel_data = opt.use_channel_data;
     let client = track!(fibers_global::execute(
-        client
-            .wait(|client| if use_channel_data {
-                client.channel_bind(peer)
-            } else {
-                client.create_permission(peer)
-            }).and_then(|(client, result)| result.map(move |_| client))
+        wait(client, move |client| if use_channel_data {
+            client.channel_bind(peer)
+        } else {
+            client.create_permission(peer)
+        }).and_then(|(client, result)| result.map(move |_| client))
     ))?;
     if use_channel_data {
         eprintln!("# CHANNEL BOUND: peer={:?}", peer);
@@ -71,7 +70,6 @@ fn main() -> Result<(), trackable::error::MainError> {
         peer,
         client,
         stdin: fibers::io::stdin(),
-        use_channel_data
     }))?;
 
     Ok(())
@@ -81,14 +79,13 @@ struct SendRecvLoop {
     peer: SocketAddr,
     client: UdpClient,
     stdin: fibers::io::Stdin,
-    use_channel_data: bool,
 }
 impl Future for SendRecvLoop {
     type Item = ();
     type Error = Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        while let Some((peer, data)) = self.client.recv_data() {
+        while let Async::Ready(Some((peer, data))) = track!(self.client.poll_recv())? {
             println!("# RECV FROM {:?}: {:?}", peer, data);
         }
 
@@ -104,15 +101,11 @@ impl Future for SendRecvLoop {
             }
             Ok(size) => {
                 let data = Vec::from(&buf[..size]);
-                if self.use_channel_data {
-                    track!(self.client.send_channel_data(self.peer, data))?;
-                } else {
-                    track!(self.client.send_data(self.peer, data))?;
-                }
+                track!(self.client.start_send(self.peer, data))?;
             }
         }
 
-        track!(self.client.run_once());
+        track!(self.client.poll_send())?;
         Ok(Async::NotReady)
     }
 }

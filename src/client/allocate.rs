@@ -6,7 +6,7 @@ use rustun::transport::StunTransport;
 use stun_codec::{rfc5389, rfc5766};
 
 use super::core::ClientCore;
-use super::StunTransaction;
+use super::stun_transaction::StunTransaction;
 use attribute::Attribute;
 use auth::AuthParams;
 use channel_data::ChannelData;

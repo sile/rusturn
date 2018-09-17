@@ -50,7 +50,7 @@ where
         let data = track!(self.encoder.encode_into_bytes(message))?;
         track!(
             self.client
-                .send_channel_data(peer, data)
+                .start_send(peer, data)
                 .map_err(|e| ErrorKind::Other.takes_over(e))
         )?;
         Ok(())
@@ -59,14 +59,18 @@ where
     fn poll_send(&mut self) -> PollSend {
         track!(
             self.client
-                .run_once()
-                .map_err(|e| ErrorKind::Other.takes_over(e))
-        )?;
-        Ok(Async::Ready(())) // TODO
+                .poll_send()
+                .map_err(|e| ErrorKind::Other.takes_over(e).into())
+        )
     }
 
     fn poll_recv(&mut self) -> PollRecv<(SocketAddr, Self::RecvItem)> {
-        if let Some((peer, data)) = self.client.recv_data() {
+        let result = track!(
+            self.client
+                .poll_recv()
+                .map_err(|e| ErrorKind::Other.takes_over(e))
+        )?;
+        if let Async::Ready(Some((peer, data))) = result {
             let item = track!(self.decoder.decode_from_bytes(&data))?;
             Ok(Async::Ready(Some((peer, item))))
         } else {

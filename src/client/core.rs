@@ -1,22 +1,21 @@
 use fibers_timeout_queue::TimeoutQueue;
 use fibers_transport::Transport;
-use futures::{Async, Future};
+use futures::{Async, Future, Poll};
 use rustun::channel::{Channel as StunChannel, RecvMessage};
 use rustun::message::{ErrorResponse, Indication, Request, Response};
 use rustun::transport::StunTransport;
 use std::collections::HashMap;
-use std::collections::VecDeque;
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 use stun_codec::rfc5766::attributes::ChannelNumber;
 use stun_codec::{rfc5389, rfc5766};
 
 use super::allocate::Allocate;
-use super::StunTransaction;
+use super::stun_transaction::StunTransaction;
 use attribute::Attribute;
 use auth::AuthParams;
 use channel_data::ChannelData;
-use {AsyncReply, AsyncResult, ErrorKind, Result};
+use {AsyncReply, AsyncResult, Error, ErrorKind, Result};
 
 const PERMISSION_LIFETIME_SECONDS: u64 = 300;
 const CHANNEL_LIFETIME_SECONDS: u64 = PERMISSION_LIFETIME_SECONDS; // FIXME: Use `600` (and refresh permissions)
@@ -35,7 +34,6 @@ where
     channels: HashMap<SocketAddr, ChannelState>,
     next_channel_number: ChannelNumber,
     timeout_queue: TimeoutQueue<TimeoutEntry>,
-    recv_data_queue: VecDeque<(SocketAddr, Vec<u8>)>, // TODO: remove
     refresh_transaction: StunTransaction,
     create_permission_transaction: StunTransaction<(SocketAddr, Response<Attribute>)>,
     channel_bind_transaction: StunTransaction<(SocketAddr, Response<Attribute>)>,
@@ -74,7 +72,6 @@ where
             channels: HashMap::new(),
             next_channel_number: ChannelNumber::min(),
             timeout_queue,
-            recv_data_queue: VecDeque::new(),
             refresh_transaction: StunTransaction::empty(),
             create_permission_transaction: StunTransaction::empty(),
             channel_bind_transaction: StunTransaction::empty(),
@@ -247,18 +244,21 @@ where
         Ok(())
     }
 
-    fn handle_stun_message(&mut self, message: RecvMessage<Attribute>) -> Result<()> {
+    fn handle_stun_message(
+        &mut self,
+        message: RecvMessage<Attribute>,
+    ) -> Result<Option<(SocketAddr, Vec<u8>)>> {
         match message {
             RecvMessage::Invalid(message) => track_panic!(ErrorKind::Other; message),
             RecvMessage::Request(request) => track_panic!(ErrorKind::Other; request),
-            RecvMessage::Indication(indication) => {
-                track!(self.handle_stun_indication(indication))?;
-                Ok(())
-            }
+            RecvMessage::Indication(indication) => track!(self.handle_stun_indication(indication)),
         }
     }
 
-    fn handle_stun_indication(&mut self, indication: Indication<Attribute>) -> Result<()> {
+    fn handle_stun_indication(
+        &mut self,
+        indication: Indication<Attribute>,
+    ) -> Result<Option<(SocketAddr, Vec<u8>)>> {
         match indication.method() {
             rfc5766::methods::DATA => {
                 let data: &rfc5766::attributes::Data =
@@ -269,10 +269,7 @@ where
                     self.permissions.contains_key(&peer.address().ip()),
                     ErrorKind::Other; peer,  indication
                 );
-
-                self.recv_data_queue
-                    .push_back((peer.address(), Vec::from(data.data())));
-                Ok(())
+                Ok(Some((peer.address(), Vec::from(data.data()))))
             }
             _ => {
                 track_panic!(ErrorKind::Other; indication);
@@ -280,7 +277,7 @@ where
         }
     }
 
-    fn handle_channel_data(&mut self, data: ChannelData) -> Result<()> {
+    fn handle_channel_data(&mut self, data: ChannelData) -> Result<(SocketAddr, Vec<u8>)> {
         // FIXME: optimize
         let peer = track_assert_some!(
             self.channels
@@ -289,8 +286,7 @@ where
                 .map(|x| *x.0),
             ErrorKind::Other
         );
-        self.recv_data_queue.push_back((peer, data.into_data()));
-        Ok(())
+        Ok((peer, data.into_data()))
     }
 
     fn create_permission_inner(&mut self, peer: SocketAddr) -> Result<()> {
@@ -362,41 +358,47 @@ where
         result
     }
 
-    pub fn send_data(&mut self, peer: SocketAddr, data: Vec<u8>) -> Result<()> {
-        track_assert!(self.permissions.contains_key(&peer.ip()), ErrorKind::Other; peer);
-
-        let mut indication = Indication::new(rfc5766::methods::SEND);
-        indication.add_attribute(rfc5766::attributes::XorPeerAddress::new(peer).into());
-        indication.add_attribute(track!(rfc5766::attributes::Data::new(data))?.into());
-        track!(self.stun_channel.cast((), indication))?;
-
+    pub fn start_send(&mut self, peer: SocketAddr, data: Vec<u8>) -> Result<()> {
+        if let Some(state) = self.channels.get(&peer) {
+            let data = track!(ChannelData::new(state.channel_number(), data,))?;
+            track!(self.channel_data_transporter.start_send((), data))?;
+        } else if self.permissions.contains_key(&peer.ip()) {
+            track_assert!(self.permissions.contains_key(&peer.ip()), ErrorKind::Other; peer);
+            let mut indication = Indication::new(rfc5766::methods::SEND);
+            indication.add_attribute(rfc5766::attributes::XorPeerAddress::new(peer).into());
+            indication.add_attribute(track!(rfc5766::attributes::Data::new(data))?.into());
+            track!(self.stun_channel.cast((), indication))?;
+        } else {
+            track_panic!(ErrorKind::InvalidInput, "Unknown peer: {:?}", peer);
+        }
         Ok(())
     }
 
-    pub fn send_channel_data(&mut self, peer: SocketAddr, data: Vec<u8>) -> Result<()> {
-        let state = track_assert_some!(self.channels.get(&peer), ErrorKind::Other; peer);
-        let data = track!(ChannelData::new(state.channel_number(), data,))?;
-        track!(self.channel_data_transporter.start_send((), data))?;
-        Ok(())
+    pub fn poll_send(&mut self) -> Poll<(), Error> {
+        let is_ready = track!(self.stun_channel.poll_send())?.is_ready()
+            && track!(self.channel_data_transporter.poll_send())?.is_ready();
+        if is_ready {
+            Ok(Async::Ready(()))
+        } else {
+            Ok(Async::NotReady)
+        }
     }
 
-    pub fn recv_data(&mut self) -> Option<(SocketAddr, Vec<u8>)> {
-        self.recv_data_queue.pop_front()
-    }
-
-    pub fn run_once(&mut self) -> Result<()> {
+    pub fn poll_recv(&mut self) -> Poll<Option<(SocketAddr, Vec<u8>)>, Error> {
         let mut did_something = true;
         while did_something {
             did_something = false;
 
-            while let Async::Ready((_peer, message)) = track!(self.stun_channel.poll_recv())? {
+            while let Async::Ready((_, message)) = track!(self.stun_channel.poll_recv())? {
                 did_something = true;
-                track!(self.handle_stun_message(message))?;
+                if let Some((peer, data)) = track!(self.handle_stun_message(message))? {
+                    return Ok(Async::Ready(Some((peer, data))));
+                }
             }
             while let Async::Ready(data) = track!(self.channel_data_transporter.poll_recv())? {
-                did_something = true;
-                if let Some((_peer, data)) = data {
-                    track!(self.handle_channel_data(data))?;
+                if let Some((_, data)) = data {
+                    let (peer, data) = track!(self.handle_channel_data(data))?;
+                    return Ok(Async::Ready(Some((peer, data))));
                 } else {
                     track_panic!(ErrorKind::Other, "Unexpected termination");
                 }
@@ -421,7 +423,7 @@ where
             }
             track!(self.channel_data_transporter.poll_send())?;
         }
-        Ok(())
+        Ok(Async::NotReady)
     }
 }
 

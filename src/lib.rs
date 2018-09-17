@@ -14,6 +14,7 @@ extern crate trackable;
 pub use rustun::{Error, ErrorKind, Result};
 
 pub mod attribute;
+
 pub mod auth;
 pub mod client;
 pub mod transport;
