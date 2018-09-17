@@ -8,13 +8,14 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
+use stun_codec::rfc5766::attributes::ChannelNumber;
 use stun_codec::{rfc5389, rfc5766};
 
 use super::allocate::Allocate;
 use super::StunTransaction;
 use attribute::Attribute;
 use auth::AuthParams;
-use channel_data::{ChannelData, ChannelNumber, MAX_CHANNEL_NUMBER, MIN_CHANNEL_NUMBER};
+use channel_data::ChannelData;
 use {AsyncReply, AsyncResult, ErrorKind, Result};
 
 const PERMISSION_LIFETIME_SECONDS: u64 = 300;
@@ -32,7 +33,7 @@ where
     lifetime: Duration,
     permissions: HashMap<IpAddr, Option<AsyncReply<()>>>,
     channels: HashMap<SocketAddr, ChannelState>,
-    next_channel_number: u16,
+    next_channel_number: ChannelNumber,
     timeout_queue: TimeoutQueue<TimeoutEntry>,
     recv_data_queue: VecDeque<(SocketAddr, Vec<u8>)>, // TODO: remove
     refresh_transaction: StunTransaction,
@@ -71,7 +72,7 @@ where
             lifetime,
             permissions: HashMap::new(),
             channels: HashMap::new(),
-            next_channel_number: MIN_CHANNEL_NUMBER,
+            next_channel_number: ChannelNumber::min(),
             timeout_queue,
             recv_data_queue: VecDeque::new(),
             refresh_transaction: StunTransaction::empty(),
@@ -284,11 +285,11 @@ where
         let peer = track_assert_some!(
             self.channels
                 .iter()
-                .find(|x| x.1.channel_number().0 == data.channel_number)
+                .find(|x| x.1.channel_number() == data.channel_number())
                 .map(|x| *x.0),
             ErrorKind::Other
         );
-        self.recv_data_queue.push_back((peer, data.data));
+        self.recv_data_queue.push_back((peer, data.into_data()));
         Ok(())
     }
 
@@ -313,7 +314,7 @@ where
 
         let mut request = Request::new(rfc5766::methods::CHANNEL_BIND);
         request.add_attribute(rfc5766::attributes::XorPeerAddress::new(peer).into());
-        request.add_attribute(rfc5766::attributes::ChannelNumber::new(channel_number.0).into());
+        request.add_attribute(channel_number.into());
         track!(self.auth_params.add_auth_attributes(&mut request))?;
 
         self.channel_bind_transaction =
@@ -323,13 +324,9 @@ where
 
     fn next_channel_number(&mut self) -> ChannelNumber {
         // FIXME: collision check
-        let n = self.next_channel_number;
-        if self.next_channel_number == MAX_CHANNEL_NUMBER {
-            self.next_channel_number = 0;
-        } else {
-            self.next_channel_number += 1;
-        }
-        ChannelNumber(n)
+        let curr = self.next_channel_number;
+        self.next_channel_number = curr.wrapping_increment();
+        curr
     }
 
     pub fn create_permission(&mut self, peer: SocketAddr) -> AsyncResult<()> {
@@ -378,10 +375,7 @@ where
 
     pub fn send_channel_data(&mut self, peer: SocketAddr, data: Vec<u8>) -> Result<()> {
         let state = track_assert_some!(self.channels.get(&peer), ErrorKind::Other; peer);
-        let data = ChannelData {
-            channel_number: state.channel_number().0,
-            data,
-        };
+        let data = track!(ChannelData::new(state.channel_number(), data,))?;
         track!(self.channel_data_transporter.start_send((), data))?;
         Ok(())
     }

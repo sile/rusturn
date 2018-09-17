@@ -71,6 +71,7 @@ pub trait Client {
     fn run_once(&mut self) -> Result<()>;
     fn local_addr(&self) -> SocketAddr;
 
+    // TODO: function
     fn wait<FN, FUT>(mut self, f: FN) -> Wait<Self, FUT>
     where
         Self: Sized,

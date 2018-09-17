@@ -1,29 +1,29 @@
 use bytecodec::bytes::{BytesDecoder, BytesEncoder};
 use bytecodec::combinator::Peekable;
 use bytecodec::fixnum::{U16beDecoder, U16beEncoder};
-use bytecodec::{ByteCount, Decode, Encode, Eos, Result, SizedEncode};
-
-pub const MIN_CHANNEL_NUMBER: u16 = 0x4000;
-pub const MAX_CHANNEL_NUMBER: u16 = 0x7FFF;
-
-pub const CHANNEL_LIFETIME_SECONDS: u64 = 10 * 60;
-
-// TODO: move to `stun_codec`
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ChannelNumber(pub u16);
+use bytecodec::{ByteCount, Decode, Encode, Eos, ErrorKind, Result, SizedEncode};
+use stun_codec::rfc5766::attributes::ChannelNumber;
 
 #[derive(Debug)]
 pub struct ChannelData {
-    pub channel_number: u16, // TODO: type
-    pub data: Vec<u8>,
+    channel_number: ChannelNumber,
+    data: Vec<u8>,
 }
 impl ChannelData {
-    pub fn new(channel_number: u16, data: Vec<u8>) -> Self {
-        // TODO: validate length
-        ChannelData {
+    pub fn new(channel_number: ChannelNumber, data: Vec<u8>) -> Result<Self> {
+        track_assert!(data.len() <= 0xFFFF, ErrorKind::InvalidInput; data.len());
+        Ok(ChannelData {
             channel_number,
             data,
-        }
+        })
+    }
+
+    pub fn channel_number(&self) -> ChannelNumber {
+        self.channel_number
+    }
+
+    pub fn into_data(self) -> Vec<u8> {
+        self.data
     }
 }
 
@@ -51,6 +51,7 @@ impl Decode for ChannelDataDecoder {
 
     fn finish_decoding(&mut self) -> Result<Self::Item> {
         let channel_number = track!(self.channel_number.finish_decoding())?;
+        let channel_number = track!(ChannelNumber::new(channel_number))?;
         let _ = track!(self.data_len.finish_decoding())?;
         let data = track!(self.data.finish_decoding())?;
         Ok(ChannelData {
@@ -89,7 +90,10 @@ impl Encode for ChannelDataEncoder {
     }
 
     fn start_encoding(&mut self, item: Self::Item) -> Result<()> {
-        track!(self.channel_number.start_encoding(item.channel_number))?;
+        track!(
+            self.channel_number
+                .start_encoding(item.channel_number.value())
+        )?;
         track!(self.data_len.start_encoding(item.data.len() as u16))?;
         track!(self.data.start_encoding(item.data))?;
         Ok(())

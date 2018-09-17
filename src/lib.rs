@@ -15,10 +15,10 @@ pub use rustun::{Error, ErrorKind, Result};
 
 pub mod attribute;
 pub mod auth;
-pub mod channel_data;
 pub mod client;
 pub mod transport;
 
+mod channel_data;
 mod turn_message;
 
 #[derive(Debug)]
