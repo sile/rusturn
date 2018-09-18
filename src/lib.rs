@@ -1,4 +1,4 @@
-//! A Rust Implementation of [TURN][RFC 5766] server and client.
+//! A Rust implementation of [TURN][RFC 5766] server and client.
 //!
 //! # Examples
 //!

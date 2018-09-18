@@ -7,7 +7,7 @@ rusturn
 [![Code Coverage](https://codecov.io/gh/sile/rusturn/branch/master/graph/badge.svg)](https://codecov.io/gh/sile/rusturn/branch/master)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A Rust Implementation of [TURN][RFC 5766] server and client.
+A Rust implementation of [TURN][RFC 5766] server and client.
 
 [Documentation](https://docs.rs/rusturn)
 
