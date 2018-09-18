@@ -7,6 +7,7 @@ use futures::{Async, Future, Poll, Stream};
 use std::net::SocketAddr;
 
 use self::core::ServerCore;
+use auth::AuthParams;
 use transport::{
     ChannelDataTcpTransporter, ChannelDataUdpTransporter, StunTcpTransporter, StunTransporter,
     StunUdpTransporter,
@@ -22,14 +23,17 @@ pub struct UdpServer {
     core: ServerCore<StunUdpTransporter, ChannelDataUdpTransporter>,
 }
 impl UdpServer {
-    pub fn start(bind_addr: SocketAddr) -> impl Future<Item = Self, Error = Error> {
+    pub fn start(
+        bind_addr: SocketAddr,
+        auth_params: AuthParams,
+    ) -> impl Future<Item = Self, Error = Error> {
         UdpTransporter::bind(bind_addr)
             .map_err(|e| track!(Error::from(e)))
             .map(move |transporter| {
                 let transporter = RcTransporter::new(transporter);
                 let stun = StunUdpTransporter::new(StunTransporter::new(transporter.clone()));
                 let channel_data = ChannelDataUdpTransporter::new(transporter);
-                let core = ServerCore::new(stun, channel_data);
+                let core = ServerCore::new(stun, channel_data, auth_params);
                 UdpServer { core }
             })
     }
@@ -55,9 +59,14 @@ impl Future for UdpServer {
 pub struct TcpServer {
     listener: TcpListener<DefaultFactory<TurnMessageEncoder>, DefaultFactory<TurnMessageDecoder>>,
     spawner: BoxSpawn,
+    auth_params: AuthParams,
 }
 impl TcpServer {
-    pub fn start<S>(spawner: S, bind_addr: SocketAddr) -> impl Future<Item = Self, Error = Error>
+    pub fn start<S>(
+        spawner: S,
+        bind_addr: SocketAddr,
+        auth_params: AuthParams,
+    ) -> impl Future<Item = Self, Error = Error>
     where
         S: Spawn + Send + 'static,
     {
@@ -66,6 +75,7 @@ impl TcpServer {
             .map(move |listener| TcpServer {
                 listener,
                 spawner: spawner.boxed(),
+                auth_params,
             })
     }
 
@@ -86,8 +96,10 @@ impl Future for TcpServer {
                 let stun = FixedPeerTransporter::new(peer, (), stun);
                 let channel_data = ChannelDataTcpTransporter::new(transporter);
                 let channel_data = FixedPeerTransporter::new(peer, (), channel_data);
-                self.spawner
-                    .spawn(ServerCore::new(stun, channel_data).map_err(|e| panic!("{}", e)));
+                let auth_params = self.auth_params.clone();
+                self.spawner.spawn(
+                    ServerCore::new(stun, channel_data, auth_params).map_err(|e| panic!("{}", e)),
+                );
             } else {
                 return Ok(Async::Ready(()));
             }

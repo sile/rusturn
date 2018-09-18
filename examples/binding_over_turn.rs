@@ -43,7 +43,7 @@ struct Opt {
 fn main() -> Result<(), trackable::error::MainError> {
     let opt = Opt::from_args();
 
-    let auth_params = track!(AuthParams::new(opt.username.clone(), opt.password.clone()))?;
+    let auth_params = track!(AuthParams::new(&opt.username, &opt.password))?;
 
     let turn_client = track!(fibers_global::execute(UdpClient::allocate(
         opt.turn_server,

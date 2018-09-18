@@ -1,5 +1,5 @@
-use rustun::message::Request;
 use stun_codec::rfc5389;
+use stun_codec::Message;
 
 use attribute::Attribute;
 use {Error, ErrorKind, Result};
@@ -12,13 +12,30 @@ pub struct AuthParams {
     nonce: Option<rfc5389::attributes::Nonce>,
 }
 impl AuthParams {
-    pub fn new(username: String, password: String) -> Result<Self> {
-        let username = track!(rfc5389::attributes::Username::new(username))?;
+    pub fn new(username: &str, password: &str) -> Result<Self> {
+        let username = track!(rfc5389::attributes::Username::new(username.to_owned()))?;
         Ok(AuthParams {
             username,
-            password,
+            password: password.to_owned(),
             realm: None,
             nonce: None,
+        })
+    }
+
+    pub fn with_realm_and_nonce(
+        username: &str,
+        password: &str,
+        realm: &str,
+        nonce: &str,
+    ) -> Result<Self> {
+        let username = track!(rfc5389::attributes::Username::new(username.to_owned()))?;
+        let realm = track!(rfc5389::attributes::Realm::new(realm.to_owned()))?;
+        let nonce = track!(rfc5389::attributes::Nonce::new(nonce.to_owned()))?;
+        Ok(AuthParams {
+            username,
+            password: password.to_owned(),
+            realm: Some(realm),
+            nonce: Some(nonce),
         })
     }
 
@@ -38,21 +55,32 @@ impl AuthParams {
         self.nonce = Some(nonce);
     }
 
-    pub fn add_auth_attributes(&self, request: &mut Request<Attribute>) -> Result<()> {
+    pub fn get_realm(&self) -> Option<&rfc5389::attributes::Realm> {
+        self.realm.as_ref()
+    }
+
+    pub fn get_nonce(&self) -> Option<&rfc5389::attributes::Nonce> {
+        self.nonce.as_ref()
+    }
+
+    pub fn add_auth_attributes<T>(&self, mut message: T) -> Result<()>
+    where
+        T: AsMut<Message<Attribute>>,
+    {
         let realm = track_assert_some!(self.realm.clone(), ErrorKind::Other);
         let nonce = track_assert_some!(self.nonce.clone(), ErrorKind::Other);
-        request.add_attribute(self.username.clone().into());
-        request.add_attribute(realm.clone().into());
-        request.add_attribute(nonce.into());
+        message.as_mut().add_attribute(self.username.clone().into());
+        message.as_mut().add_attribute(realm.clone().into());
+        message.as_mut().add_attribute(nonce.into());
         let mi = track!(
             rfc5389::attributes::MessageIntegrity::new_long_term_credential(
-                request.as_ref(),
+                message.as_mut(),
                 &self.username,
                 &realm,
                 &self.password,
             )
         )?;
-        request.add_attribute(mi.into());
+        message.as_mut().add_attribute(mi.into());
         Ok(())
     }
 

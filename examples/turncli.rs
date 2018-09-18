@@ -43,7 +43,7 @@ fn main() -> Result<(), trackable::error::MainError> {
     let opt = Opt::from_args();
 
     let server_addr = opt.server;
-    let auth_params = track!(AuthParams::new(opt.username.clone(), opt.password.clone()))?;
+    let auth_params = track!(AuthParams::new(&opt.username, &opt.password))?;
     let peer = opt.peer;
 
     let client = track!(fibers_global::execute(UdpClient::allocate(

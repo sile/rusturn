@@ -1,3 +1,70 @@
+//! A Rust Implementation of [TURN][RFC 5766] server and client.
+//!
+//! # Examples
+//!
+//! ```
+//! # extern crate fibers_global;
+//! # extern crate futures;
+//! # extern crate rustun;
+//! # extern crate rusturn;
+//! # extern crate stun_codec;
+//! # extern crate trackable;
+//! use futures::Future;
+//! use rustun::message::Request;
+//! use rustun::transport::StunUdpTransporter;
+//! use rusturn::auth::AuthParams;
+//! use rusturn::transport::UdpOverTurnTransporter;
+//! use stun_codec::{rfc5389, MessageDecoder, MessageEncoder};
+//!
+//! # fn main() -> Result<(), trackable::error::MainError> {
+//! let client_auth_params = AuthParams::new("foo", "bar")?;
+//! let server_auth_params =
+//!     AuthParams::with_realm_and_nonce("foo", "bar", "baz", "qux")?;
+//!
+//! // STUN server (peer)
+//! let stun_server = fibers_global::execute(rustun::server::UdpServer::start(
+//!     fibers_global::handle(),
+//!     "127.0.0.1:0".parse().unwrap(),
+//!     rustun::server::BindingHandler,
+//! ))?;
+//! let stun_server_addr = stun_server.local_addr();
+//! fibers_global::spawn(stun_server.map(|_| ()).map_err(|e| panic!("{}", e)));
+//!
+//! // TURN server
+//! let turn_server = fibers_global::execute(rusturn::server::UdpServer::start(
+//!     "127.0.0.1:0".parse().unwrap(),
+//!     server_auth_params,
+//! ))?;
+//! let turn_server_addr = turn_server.local_addr();
+//! fibers_global::spawn(turn_server.map_err(|e| panic!("{}", e)));
+//!
+//! // TURN client
+//! let turn_client = fibers_global::execute(rusturn::client::UdpClient::allocate(
+//!     turn_server_addr,
+//!     client_auth_params
+//! ))?;
+//! let transporter =
+//!     UdpOverTurnTransporter::<_, MessageEncoder<_>, MessageDecoder<_>>::new(turn_client);
+//!
+//! // STUN client (over TURN)
+//! let stun_channel = rustun::channel::Channel::new(StunUdpTransporter::new(transporter));
+//! let stun_client = rustun::client::Client::new(&fibers_global::handle(), stun_channel);
+//!
+//! // BINDING request
+//! let request = Request::<rfc5389::Attribute>::new(rfc5389::methods::BINDING);
+//! let response = fibers_global::execute(
+//!     stun_client.call(stun_server_addr, request)
+//! )?;
+//! assert!(response.is_ok(), "{:?}", response);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # References
+//!
+//! - [RFC 5766: Traversal Using Relays around NAT (TURN)][RFC 5766]
+//!
+//! [RFC 5766]: https://tools.ietf.org/html/rfc5766
 #[macro_use]
 extern crate bytecodec;
 extern crate factory;
@@ -67,7 +134,9 @@ mod tests {
 
     #[test]
     fn it_works() -> std::result::Result<(), MainError> {
-        let auth_params = track!(AuthParams::new("foo".to_owned(), "bar".to_owned()))?;
+        let client_auth_params = track!(AuthParams::new("foo", "bar"))?;
+        let server_auth_params =
+            track!(AuthParams::with_realm_and_nonce("foo", "bar", "baz", "qux"))?;
 
         // STUN server (peer)
         let stun_server = fibers_global::execute(rustun::server::UdpServer::start(
@@ -79,15 +148,17 @@ mod tests {
         fibers_global::spawn(stun_server.map(|_| ()).map_err(|e| panic!("{}", e)));
 
         // TURN server
-        let turn_server =
-            fibers_global::execute(server::UdpServer::start("127.0.0.1:0".parse().unwrap()))?;
+        let turn_server = fibers_global::execute(server::UdpServer::start(
+            "127.0.0.1:0".parse().unwrap(),
+            server_auth_params,
+        ))?;
         let turn_server_addr = turn_server.local_addr();
-        fibers_global::spawn(turn_server.map(|_| ()).map_err(|e| panic!("{}", e)));
+        fibers_global::spawn(turn_server.map_err(|e| panic!("{}", e)));
 
         // TURN client
         let turn_client = track!(fibers_global::execute(client::UdpClient::allocate(
             turn_server_addr,
-            auth_params
+            client_auth_params
         )))?;
         let transporter =
             UdpOverTurnTransporter::<_, MessageEncoder<_>, MessageDecoder<_>>::new(turn_client);

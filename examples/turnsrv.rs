@@ -1,60 +1,55 @@
-// TODO
-// extern crate clap;
-// #[macro_use]
-// extern crate slog;
-// extern crate fibers;
-// extern crate rustun;
-// extern crate rusturn;
-// extern crate slog_term;
+extern crate fibers_global;
+extern crate rusturn;
+#[macro_use]
+extern crate structopt;
+#[macro_use]
+extern crate trackable;
 
-// use clap::{App, Arg};
-// use fibers::{Executor, InPlaceExecutor, Spawn};
-// use rustun::server::{TcpServer, UdpServer};
-// use rusturn::server::DefaultHandler;
-// use slog::{DrainExt, LevelFilter, Logger, Record};
-// use std::net::SocketAddr;
+use rusturn::auth::AuthParams;
+use rusturn::server::UdpServer;
+use std::net::SocketAddr;
+use structopt::StructOpt;
 
-fn main() {
-    // let matches = App::new("turnsrv")
-    //     .arg(Arg::with_name("TCP").long("tcp"))
-    //     .arg(
-    //         Arg::with_name("ADDR")
-    //             .short("a")
-    //             .long("addr")
-    //             .takes_value(true)
-    //             .default_value("127.0.0.1:3478"),
-    //     )
-    //     .arg(
-    //         Arg::with_name("PASSWORD")
-    //             .long("password")
-    //             .takes_value(true)
-    //             .default_value("password"),
-    //     )
-    //     .get_matches();
+#[derive(Debug, StructOpt)]
+#[structopt(name = "turncli")]
+struct Opt {
+    /// STUN server address.
+    #[structopt(long = "server", default_value = "127.0.0.1:3478")]
+    server: SocketAddr,
 
-    // let addr = matches.value_of("ADDR").unwrap();
-    // let addr: SocketAddr = addr.parse().expect("Invalid UDP address");
+    /// Username.
+    #[structopt(long = "username", default_value = "foo")]
+    username: String,
 
-    // let place_fn = |info: &Record| format!("{}:{}", info.module(), info.line());
-    // let logger = Logger::root(
-    //     LevelFilter::new(slog_term::streamer().build(), slog::Level::Debug).fuse(),
-    //     o!("place" => place_fn),
-    // );
+    /// Password.
+    #[structopt(long = "password", default_value = "bar")]
+    password: String,
 
-    // let password = matches.value_of("PASSWORD").unwrap();
+    /// Realm.
+    #[structopt(long = "realm", default_value = "baz")]
+    realm: String,
 
-    // let mut executor = InPlaceExecutor::new().unwrap();
-    // let mut handler = DefaultHandler::with_logger(logger, executor.handle(), addr.ip());
-    // handler.set_password(password);
+    /// Nonce.
+    #[structopt(long = "nonce", default_value = "qux")]
+    nonce: String,
+}
 
-    // let spawner = executor.handle();
-    // let monitor = if matches.is_present("TCP") {
-    //     executor.spawn_monitor(TcpServer::new(addr).start(spawner, handler))
-    // } else {
-    //     let mut server = UdpServer::new(addr);
-    //     server.recv_buffer_size(10240);
-    //     executor.spawn_monitor(server.start(spawner, handler))
-    // };
-    // let result = executor.run_fiber(monitor).unwrap();
-    // println!("RESULT: {:?}", result);
+fn main() -> Result<(), trackable::error::MainError> {
+    let opt = Opt::from_args();
+
+    let server_addr = opt.server;
+    let auth_params = track!(AuthParams::with_realm_and_nonce(
+        &opt.username,
+        &opt.password,
+        &opt.realm,
+        &opt.nonce
+    ))?;
+
+    let turn_server = track!(fibers_global::execute(UdpServer::start(
+        server_addr,
+        auth_params,
+    )))?;
+    track!(fibers_global::execute(turn_server))?;
+
+    Ok(())
 }
