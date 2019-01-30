@@ -124,7 +124,7 @@ where
 
         let mut response = SuccessResponse::new(&request);
         track!(self.auth_params.add_auth_attributes(&mut response))?;
-        track!(self.stun_channel.reply(client, Ok(response)));
+        track!(self.stun_channel.reply(client, Ok(response)))?;
 
         self.timeout_queue.push(
             TimeoutEntry::Permission {
@@ -149,11 +149,10 @@ where
             ErrorKind::InvalidInput
         )
         .address();
-        let channel_number = track_assert_some!(
+        let channel_number = *track_assert_some!(
             request.get_attribute::<ChannelNumber>(),
             ErrorKind::InvalidInput
-        )
-        .clone();
+        );
 
         let seqno = self.next_seqno();
         let allocation =
@@ -167,7 +166,7 @@ where
 
         let mut response = SuccessResponse::new(&request);
         track!(self.auth_params.add_auth_attributes(&mut response))?;
-        track!(self.stun_channel.reply(client, Ok(response)));
+        track!(self.stun_channel.reply(client, Ok(response)))?;
 
         self.timeout_queue.push(
             TimeoutEntry::Channel {
@@ -378,11 +377,11 @@ where
                     let data = Vec::from(&buf[..size]);
 
                     // FIXME: optimize
-                    if let Some(channel_number) = allocation
+                    if let Some(&channel_number) = allocation
                         .channels
                         .iter()
                         .find(|(_, s)| s.peer_addr == peer)
-                        .map(|x| x.0.clone())
+                        .map(|x| x.0)
                     {
                         let data = track!(ChannelData::new(channel_number, data))?;
                         track!(self.channel_data_transporter.start_send(*client, data))?;

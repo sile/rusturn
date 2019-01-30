@@ -98,7 +98,7 @@ impl TcpClient {
     }
 
     pub fn relay_addr(&self) -> Option<SocketAddr> {
-        self.0.relay_addr
+        self.0.relay_addr()
     }
 }
 unsafe impl Send for TcpClient {}
@@ -160,7 +160,7 @@ impl UdpClient {
     }
 
     pub fn relay_addr(&self) -> Option<SocketAddr> {
-        self.0.relay_addr
+        self.0.relay_addr()
     }
 }
 unsafe impl Send for UdpClient {}

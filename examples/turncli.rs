@@ -2,7 +2,6 @@ extern crate fibers;
 extern crate fibers_global;
 extern crate futures;
 extern crate rusturn;
-#[macro_use]
 extern crate structopt;
 #[macro_use]
 extern crate trackable;

@@ -114,7 +114,7 @@ impl<T> futures::Future for AsyncResult<T> {
 struct AsyncReply<T>(fibers::sync::oneshot::Monitored<T, Error>);
 impl<T> AsyncReply<T> {
     fn send(self, result: Result<T>) {
-        let _ = self.0.exit(result);
+        self.0.exit(result);
     }
 }
 

@@ -12,6 +12,7 @@ pub enum TurnMessage {
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum TurnMessageDecoder {
     Stun(stun::MessageDecoder<Attribute>),
     ChannelData(ChannelDataDecoder),
@@ -72,6 +73,7 @@ impl Decode for TurnMessageDecoder {
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum TurnMessageEncoder {
     Stun(stun::MessageEncoder<Attribute>),
     ChannelData(ChannelDataEncoder),

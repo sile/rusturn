@@ -37,7 +37,7 @@ where
     refresh_transaction: StunTransaction,
     create_permission_transaction: StunTransaction<(SocketAddr, Response<Attribute>)>,
     channel_bind_transaction: StunTransaction<(SocketAddr, Response<Attribute>)>,
-    pub relay_addr: Option<SocketAddr>,
+    relay_addr: Option<SocketAddr>,
 }
 impl<S, C> ClientCore<S, C>
 where
@@ -83,6 +83,10 @@ where
 
     pub fn stun_channel_ref(&self) -> &StunChannel<Attribute, S> {
         &self.stun_channel
+    }
+
+    pub fn relay_addr(&self) -> Option<SocketAddr> {
+        self.relay_addr
     }
 
     fn start_refresh(&mut self) -> Result<()> {
@@ -143,11 +147,8 @@ where
             }
             Ok(response) => {
                 for attr in response.attributes() {
-                    match attr {
-                        Attribute::MessageIntegrity(a) => {
-                            track!(self.auth_params.validate(&a))?;
-                        }
-                        _ => {}
+                    if let Attribute::MessageIntegrity(a) = attr {
+                        track!(self.auth_params.validate(&a))?;
                     }
                 }
                 if let Some(reply) = reply {
@@ -182,11 +183,8 @@ where
             }
             Ok(response) => {
                 for attr in response.attributes() {
-                    match attr {
-                        Attribute::MessageIntegrity(a) => {
-                            track!(self.auth_params.validate(&a))?;
-                        }
-                        _ => {}
+                    if let Attribute::MessageIntegrity(a) = attr {
+                        track!(self.auth_params.validate(&a))?;
                     }
                 }
 
@@ -402,7 +400,7 @@ where
                     track_panic!(ErrorKind::Other, "Unexpected termination");
                 }
             }
-            while let Async::Ready(data) = track!(self.channel_data_transporter.poll_recv())? {
+            if let Async::Ready(data) = track!(self.channel_data_transporter.poll_recv())? {
                 if let Some((_, data)) = data {
                     let (peer, data) = track!(self.handle_channel_data(data))?;
                     return Ok(Async::Ready(Some((peer, data))));

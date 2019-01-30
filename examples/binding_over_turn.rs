@@ -2,7 +2,6 @@ extern crate fibers_global;
 extern crate futures;
 extern crate rustun;
 extern crate rusturn;
-#[macro_use]
 extern crate structopt;
 extern crate stun_codec;
 #[macro_use]
