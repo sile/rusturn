@@ -37,6 +37,7 @@ where
     refresh_transaction: StunTransaction,
     create_permission_transaction: StunTransaction<(SocketAddr, Response<Attribute>)>,
     channel_bind_transaction: StunTransaction<(SocketAddr, Response<Attribute>)>,
+    pub relay_addr: Option<SocketAddr>,
 }
 impl<S, C> ClientCore<S, C>
 where
@@ -60,6 +61,7 @@ where
         channel_data_transporter: C,
         auth_params: AuthParams,
         lifetime: Duration,
+        relay_addr: Option<SocketAddr>,
     ) -> Self {
         let mut timeout_queue = TimeoutQueue::new();
         timeout_queue.push(TimeoutEntry::Refresh, lifetime * 10 / 9);
@@ -75,6 +77,7 @@ where
             refresh_transaction: StunTransaction::empty(),
             create_permission_transaction: StunTransaction::empty(),
             channel_bind_transaction: StunTransaction::empty(),
+            relay_addr,
         }
     }
 
