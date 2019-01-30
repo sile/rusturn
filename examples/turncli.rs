@@ -52,6 +52,8 @@ fn main() -> Result<(), trackable::error::MainError> {
     )))?;
     eprintln!("# ALLOCATED: server={:?}", server_addr);
 
+    eprintln!("Relay address is {:?}", client.relay_addr());
+
     let use_channel_data = opt.use_channel_data;
     let client = track!(fibers_global::execute(
         wait(client, move |client| if use_channel_data {

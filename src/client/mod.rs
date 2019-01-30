@@ -96,6 +96,10 @@ impl TcpClient {
                 track_err!(ClientCore::allocate(stun, channel_data, auth_params))
             }).map(TcpClient)
     }
+    
+    pub fn relay_addr(&self) -> Option<SocketAddr> {
+        self.0.relay_addr
+    }
 }
 unsafe impl Send for TcpClient {}
 impl Client for TcpClient {
@@ -152,6 +156,10 @@ impl UdpClient {
                 let channel_data = FixedPeerTransporter::new((), server_addr, channel_data);
                 track_err!(ClientCore::allocate(stun, channel_data, auth_params))
             }).map(UdpClient)
+    }
+
+    pub fn relay_addr(&self) -> Option<SocketAddr> {
+        self.0.relay_addr
     }
 }
 unsafe impl Send for UdpClient {}

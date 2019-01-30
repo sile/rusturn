@@ -68,6 +68,7 @@ where
         match response {
             Ok(response) => {
                 let mut lifetime = None;
+                let mut relay_addr = None;
                 for attr in response.attributes() {
                     match attr {
                         Attribute::Lifetime(a) => {
@@ -76,16 +77,20 @@ where
                         Attribute::MessageIntegrity(a) => {
                             track!(self.auth_params.validate(&a))?;
                         }
+                        Attribute::XorRelayAddress(a) => {
+                            relay_addr = Some(a.address());
+                        }
                         _ => {}
                     }
                 }
 
                 let lifetime = track_assert_some!(lifetime, ErrorKind::Other; response);
-                let client = ClientCore::new(
+                let mut client = ClientCore::new(
                     self.stun_channel.take().expect("never fails"),
                     self.channel_data_transporter.take().expect("never fails"),
                     self.auth_params.clone(),
                     lifetime,
+                    relay_addr,
                 );
                 Ok(Some(client))
             }
