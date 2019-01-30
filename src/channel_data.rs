@@ -90,10 +90,9 @@ impl Encode for ChannelDataEncoder {
     }
 
     fn start_encoding(&mut self, item: Self::Item) -> Result<()> {
-        track!(
-            self.channel_number
-                .start_encoding(item.channel_number.value())
-        )?;
+        track!(self
+            .channel_number
+            .start_encoding(item.channel_number.value()))?;
         track!(self.data_len.start_encoding(item.data.len() as u16))?;
         track!(self.data.start_encoding(item.data))?;
         Ok(())

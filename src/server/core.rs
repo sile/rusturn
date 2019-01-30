@@ -109,7 +109,8 @@ where
         let peer = track_assert_some!(
             request.get_attribute::<rfc5766::attributes::XorPeerAddress>(),
             ErrorKind::InvalidInput
-        ).address();
+        )
+        .address();
 
         let seqno = self.next_seqno();
         let allocation =
@@ -146,11 +147,13 @@ where
         let peer = track_assert_some!(
             request.get_attribute::<rfc5766::attributes::XorPeerAddress>(),
             ErrorKind::InvalidInput
-        ).address();
+        )
+        .address();
         let channel_number = track_assert_some!(
             request.get_attribute::<ChannelNumber>(),
             ErrorKind::InvalidInput
-        ).clone();
+        )
+        .clone();
 
         let seqno = self.next_seqno();
         let allocation =
@@ -262,7 +265,8 @@ where
         let peer = track_assert_some!(
             indication.get_attribute::<rfc5766::attributes::XorPeerAddress>(),
             ErrorKind::InvalidInput
-        ).address();
+        )
+        .address();
         let data = track_assert_some!(
             indication.get_attribute::<rfc5766::attributes::Data>(),
             ErrorKind::InvalidInput
@@ -271,12 +275,10 @@ where
             allocation.permissions.contains_key(&peer.ip()),
             ErrorKind::InvalidInput
         );
-        track!(
-            allocation
-                .socket
-                .send_to(data.data(), peer)
-                .map_err(Error::from)
-        )?;
+        track!(allocation
+            .socket
+            .send_to(data.data(), peer)
+            .map_err(Error::from))?;
 
         Ok(())
     }
@@ -294,12 +296,10 @@ where
             allocation.channels.get_mut(&data.channel_number()),
             ErrorKind::InvalidInput
         );
-        track!(
-            allocation
-                .socket
-                .send_to(&data.into_data(), channel.peer_addr)
-                .map_err(Error::from)
-        )?;
+        track!(allocation
+            .socket
+            .send_to(&data.into_data(), channel.peer_addr)
+            .map_err(Error::from))?;
         Ok(())
     }
 
@@ -409,7 +409,8 @@ unsafe impl<S, C> Send for ServerCore<S, C>
 where
     S: StunTransport<Attribute, PeerAddr = SocketAddr>,
     C: Transport<PeerAddr = SocketAddr, SendItem = ChannelData, RecvItem = ChannelData>,
-{}
+{
+}
 impl<S, C> Future for ServerCore<S, C>
 where
     S: StunTransport<Attribute, PeerAddr = SocketAddr>,

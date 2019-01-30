@@ -60,7 +60,8 @@ fn main() -> Result<(), trackable::error::MainError> {
             client.channel_bind(peer)
         } else {
             client.create_permission(peer)
-        }).and_then(|(client, result)| result.map(move |_| client))
+        })
+        .and_then(|(client, result)| result.map(move |_| client))
     ))?;
     if use_channel_data {
         eprintln!("# CHANNEL BOUND: peer={:?}", peer);

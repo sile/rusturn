@@ -48,28 +48,25 @@ where
     fn start_send(&mut self, peer: SocketAddr, message: Self::SendItem) -> Result<()> {
         self.ensure_channel_exists(peer);
         let data = track!(self.encoder.encode_into_bytes(message))?;
-        track!(
-            self.client
-                .start_send(peer, data)
-                .map_err(|e| ErrorKind::Other.takes_over(e))
-        )?;
+        track!(self
+            .client
+            .start_send(peer, data)
+            .map_err(|e| ErrorKind::Other.takes_over(e)))?;
         Ok(())
     }
 
     fn poll_send(&mut self) -> PollSend {
-        track!(
-            self.client
-                .poll_send()
-                .map_err(|e| ErrorKind::Other.takes_over(e).into())
-        )
+        track!(self
+            .client
+            .poll_send()
+            .map_err(|e| ErrorKind::Other.takes_over(e).into()))
     }
 
     fn poll_recv(&mut self) -> PollRecv<(SocketAddr, Self::RecvItem)> {
-        let result = track!(
-            self.client
-                .poll_recv()
-                .map_err(|e| ErrorKind::Other.takes_over(e))
-        )?;
+        let result = track!(self
+            .client
+            .poll_recv()
+            .map_err(|e| ErrorKind::Other.takes_over(e)))?;
         if let Async::Ready(Some((peer, data))) = result {
             let item = track!(self.decoder.decode_from_bytes(&data))?;
             Ok(Async::Ready(Some((peer, item))))

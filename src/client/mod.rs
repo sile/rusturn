@@ -52,18 +52,17 @@ impl<T: Client, F: Future> Future for Wait<T, F> {
     type Error = Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        track!(
-            self.client
-                .as_mut()
-                .expect("Cannot Wait poll twice")
-                .poll_send()
-        )?;
-        if let Async::Ready(item) = track!(
-            self.client
-                .as_mut()
-                .expect("Cannot Wait poll twice")
-                .poll_recv()
-        )? {
+        track!(self
+            .client
+            .as_mut()
+            .expect("Cannot Wait poll twice")
+            .poll_send())?;
+        if let Async::Ready(item) = track!(self
+            .client
+            .as_mut()
+            .expect("Cannot Wait poll twice")
+            .poll_recv())?
+        {
             track_panic!(ErrorKind::Other, "Unexpected reception: {:?}", item);
         }
         match self.future.poll() {
@@ -94,9 +93,10 @@ impl TcpClient {
                 let stun = StunTcpTransporter::new(StunTransporter::new(transporter.clone()));
                 let channel_data = ChannelDataTcpTransporter::new(transporter);
                 track_err!(ClientCore::allocate(stun, channel_data, auth_params))
-            }).map(TcpClient)
+            })
+            .map(TcpClient)
     }
-    
+
     pub fn relay_addr(&self) -> Option<SocketAddr> {
         self.0.relay_addr
     }
@@ -155,7 +155,8 @@ impl UdpClient {
                 let channel_data = ChannelDataUdpTransporter::new(transporter);
                 let channel_data = FixedPeerTransporter::new((), server_addr, channel_data);
                 track_err!(ClientCore::allocate(stun, channel_data, auth_params))
-            }).map(UdpClient)
+            })
+            .map(UdpClient)
     }
 
     pub fn relay_addr(&self) -> Option<SocketAddr> {

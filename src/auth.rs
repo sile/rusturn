@@ -86,10 +86,9 @@ impl AuthParams {
 
     pub fn validate(&self, mi: &rfc5389::attributes::MessageIntegrity) -> Result<()> {
         let realm = track_assert_some!(self.realm.as_ref(), ErrorKind::Other);
-        track!(
-            mi.check_long_term_credential(&self.username, realm, &self.password)
-                .map_err(Error::from)
-        )?;
+        track!(mi
+            .check_long_term_credential(&self.username, realm, &self.password)
+            .map_err(Error::from))?;
         Ok(())
     }
 }
