@@ -36,10 +36,18 @@ struct Opt {
     /// Whether to send data using `ChannelData` messages.
     #[structopt(long = "use-channel-data")]
     use_channel_data: bool,
+
+    /// The number of scheduler threads.
+    #[structopt(long = "thread-count", default_value = "1")]
+    thread_count: usize,
 }
 
 fn main() -> Result<(), trackable::error::MainError> {
     let opt = Opt::from_args();
+    track_assert!(
+        fibers_global::set_thread_count(opt.thread_count),
+        trackable::error::Failed
+    );
 
     let server_addr = opt.server;
     let auth_params = track!(AuthParams::new(&opt.username, &opt.password))?;
