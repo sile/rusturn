@@ -1,49 +1,49 @@
+extern crate clap;
 extern crate fibers;
 extern crate fibers_global;
 extern crate futures;
 extern crate rusturn;
-extern crate structopt;
 #[macro_use]
 extern crate trackable;
 
+use clap::Parser;
 use futures::{Async, Future, Poll};
 use rusturn::auth::AuthParams;
 use rusturn::client::{wait, Client, UdpClient};
 use rusturn::Error;
 use std::io::Read;
 use std::net::SocketAddr;
-use structopt::StructOpt;
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = "turncli")]
+#[derive(Debug, Parser)]
+#[clap(name = "turncli")]
 struct Opt {
     /// STUN server address.
-    #[structopt(long = "server", default_value = "127.0.0.1:3478")]
+    #[clap(long, default_value = "127.0.0.1:3478")]
     server: SocketAddr,
 
     /// Peer address.
-    #[structopt(long = "peer", default_value = "127.0.0.1:2000")]
+    #[clap(long, default_value = "127.0.0.1:2000")]
     peer: SocketAddr,
 
     /// Username.
-    #[structopt(long = "username", default_value = "foo")]
+    #[clap(long, default_value = "foo")]
     username: String,
 
     /// Password.
-    #[structopt(long = "password", default_value = "bar")]
+    #[clap(long, default_value = "bar")]
     password: String,
 
     /// Whether to send data using `ChannelData` messages.
-    #[structopt(long = "use-channel-data")]
+    #[clap(long)]
     use_channel_data: bool,
 
     /// The number of scheduler threads.
-    #[structopt(long = "thread-count", default_value = "1")]
+    #[clap(long, default_value_t = 1)]
     thread_count: usize,
 }
 
 fn main() -> Result<(), trackable::error::MainError> {
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
     track_assert!(
         fibers_global::set_thread_count(opt.thread_count),
         trackable::error::Failed

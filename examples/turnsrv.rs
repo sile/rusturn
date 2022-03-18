@@ -1,40 +1,40 @@
+extern crate clap;
 extern crate fibers_global;
 extern crate rusturn;
-extern crate structopt;
 #[macro_use]
 extern crate trackable;
 
+use clap::Parser;
 use rusturn::auth::AuthParams;
 use rusturn::server::UdpServer;
 use std::net::SocketAddr;
-use structopt::StructOpt;
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = "turncli")]
+#[derive(Debug, Parser)]
+#[clap(name = "turncli")]
 struct Opt {
     /// STUN server address.
-    #[structopt(long = "server", default_value = "127.0.0.1:3478")]
+    #[clap(long, default_value = "127.0.0.1:3478")]
     server: SocketAddr,
 
     /// Username.
-    #[structopt(long = "username", default_value = "foo")]
+    #[clap(long, default_value = "foo")]
     username: String,
 
     /// Password.
-    #[structopt(long = "password", default_value = "bar")]
+    #[clap(long, default_value = "bar")]
     password: String,
 
     /// Realm.
-    #[structopt(long = "realm", default_value = "baz")]
+    #[clap(long, default_value = "baz")]
     realm: String,
 
     /// Nonce.
-    #[structopt(long = "nonce", default_value = "qux")]
+    #[clap(long, default_value = "qux")]
     nonce: String,
 }
 
 fn main() -> Result<(), trackable::error::MainError> {
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
 
     let server_addr = opt.server;
     let auth_params = track!(AuthParams::with_realm_and_nonce(

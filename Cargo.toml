@@ -27,6 +27,5 @@ stun_codec = "0.2"
 trackable = "1"
 
 [dev-dependencies]
-clap = "2"
+clap = { version = "3", features = ["derive"] }
 fibers_global = "0.1.2"
-structopt = "0.2"
