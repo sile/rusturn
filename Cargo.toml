@@ -9,6 +9,7 @@ readme = "README.md"
 keywords = ["TURN"]
 categories = ["asynchronous", "network-programming"]
 license = "MIT"
+edition = "2021"
 
 [badges]
 travis-ci = {repository = "sile/rusturn"}

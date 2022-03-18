@@ -1,6 +1,3 @@
-extern crate clap;
-extern crate fibers_global;
-extern crate rusturn;
 #[macro_use]
 extern crate trackable;
 

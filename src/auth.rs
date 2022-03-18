@@ -1,8 +1,7 @@
+use crate::attribute::Attribute;
+use crate::{Error, ErrorKind, Result};
 use stun_codec::rfc5389;
 use stun_codec::Message;
-
-use attribute::Attribute;
-use {Error, ErrorKind, Result};
 
 #[derive(Debug, Clone)]
 pub struct AuthParams {

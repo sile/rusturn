@@ -1,17 +1,16 @@
+use self::core::ClientCore;
+use crate::auth::AuthParams;
+use crate::transport::{
+    ChannelDataTcpTransporter, ChannelDataUdpTransporter, StunTcpTransporter, StunTransporter,
+    StunUdpTransporter,
+};
+use crate::{AsyncResult, Error, ErrorKind, Result};
 use fibers_transport::{
     FixedPeerTransporter, RcTransporter, TcpTransport, TcpTransporter, UdpTransport, UdpTransporter,
 };
 use futures::{Async, Future, Poll};
 use std;
 use std::net::SocketAddr;
-
-use self::core::ClientCore;
-use auth::AuthParams;
-use transport::{
-    ChannelDataTcpTransporter, ChannelDataUdpTransporter, StunTcpTransporter, StunTransporter,
-    StunUdpTransporter,
-};
-use {AsyncResult, Error, ErrorKind, Result};
 
 mod allocate;
 mod core;

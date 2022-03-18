@@ -1,8 +1,7 @@
+use crate::channel_data::ChannelData;
+use crate::turn_message::TurnMessage;
 use fibers_transport::{PollRecv, PollSend, RcTransporter, Result, Transport};
 use futures::Async;
-
-use channel_data::ChannelData;
-use turn_message::TurnMessage;
 
 #[derive(Debug)]
 pub struct ChannelDataTransporter<T: Transport> {

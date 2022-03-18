@@ -1,3 +1,9 @@
+use super::allocate::Allocate;
+use super::stun_transaction::StunTransaction;
+use crate::attribute::Attribute;
+use crate::auth::AuthParams;
+use crate::channel_data::ChannelData;
+use crate::{AsyncReply, AsyncResult, Error, ErrorKind, Result};
 use fibers_timeout_queue::TimeoutQueue;
 use fibers_transport::Transport;
 use futures::{Async, Future, Poll};
@@ -9,13 +15,6 @@ use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 use stun_codec::rfc5766::attributes::ChannelNumber;
 use stun_codec::{rfc5389, rfc5766};
-
-use super::allocate::Allocate;
-use super::stun_transaction::StunTransaction;
-use attribute::Attribute;
-use auth::AuthParams;
-use channel_data::ChannelData;
-use {AsyncReply, AsyncResult, Error, ErrorKind, Result};
 
 const PERMISSION_LIFETIME_SECONDS: u64 = 300;
 const CHANNEL_LIFETIME_SECONDS: u64 = PERMISSION_LIFETIME_SECONDS; // FIXME: Use `600` (and refresh permissions)

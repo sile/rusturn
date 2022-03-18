@@ -3,12 +3,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate fibers_global;
-//! # extern crate futures;
-//! # extern crate rustun;
-//! # extern crate rusturn;
-//! # extern crate stun_codec;
-//! # extern crate trackable;
 //! use futures::Future;
 //! use rustun::message::Request;
 //! use rustun::transport::StunUdpTransporter;
@@ -67,15 +61,8 @@
 //! [RFC 5766]: https://tools.ietf.org/html/rfc5766
 #[macro_use]
 extern crate bytecodec;
-extern crate factory;
-extern crate fibers;
 #[cfg(test)]
 extern crate fibers_global;
-extern crate fibers_timeout_queue;
-extern crate fibers_transport;
-extern crate futures;
-extern crate rand;
-extern crate rustun;
 #[macro_use]
 extern crate stun_codec;
 #[macro_use]

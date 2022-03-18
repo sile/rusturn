@@ -1,9 +1,8 @@
+use crate::attribute::Attribute;
 use futures::{self, Future, Poll};
 use rustun::message::{MessageError, Response};
 use std::fmt;
 use std::net::SocketAddr;
-
-use attribute::Attribute;
 
 pub struct StunTransaction<T = Response<Attribute>>(
     Box<dyn Future<Item = T, Error = MessageError> + Send + 'static>,

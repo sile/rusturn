@@ -1,8 +1,7 @@
+use crate::attribute::Attribute;
+use crate::channel_data::{ChannelData, ChannelDataDecoder, ChannelDataEncoder};
 use bytecodec::{ByteCount, Decode, Encode, EncodeExt, Eos, ErrorKind, Result, SizedEncode};
 use stun_codec as stun;
-
-use attribute::Attribute;
-use channel_data::{ChannelData, ChannelDataDecoder, ChannelDataEncoder};
 
 #[derive(Debug)]
 pub enum TurnMessage {

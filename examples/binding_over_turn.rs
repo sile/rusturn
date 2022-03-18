@@ -1,9 +1,3 @@
-extern crate clap;
-extern crate fibers_global;
-extern crate futures;
-extern crate rustun;
-extern crate rusturn;
-extern crate stun_codec;
 #[macro_use]
 extern crate trackable;
 
