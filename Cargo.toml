@@ -21,12 +21,11 @@ fibers = "0.1"
 fibers_timeout_queue = "0.1"
 fibers_transport = "0.1"
 futures = "0.1"
-rand = "0.6"
-rustun = "0.3"
-stun_codec = "0.1"
-trackable = "0.2"
+rand = "0.8"
+rustun = "0.4"
+stun_codec = "0.2"
+trackable = "1"
 
 [dev-dependencies]
-clap = "2"
+clap = { version = "3", features = ["derive"] }
 fibers_global = "0.1.2"
-structopt = "0.2"
