@@ -1,3 +1,11 @@
+use self::core::ServerCore;
+use crate::auth::AuthParams;
+use crate::transport::{
+    ChannelDataTcpTransporter, ChannelDataUdpTransporter, StunTcpTransporter, StunTransporter,
+    StunUdpTransporter,
+};
+use crate::turn_message::{TurnMessageDecoder, TurnMessageEncoder};
+use crate::Error;
 use factory::DefaultFactory;
 use fibers::{BoxSpawn, Spawn};
 use fibers_transport::{
@@ -5,15 +13,6 @@ use fibers_transport::{
 };
 use futures::{Async, Future, Poll, Stream};
 use std::net::SocketAddr;
-
-use self::core::ServerCore;
-use auth::AuthParams;
-use transport::{
-    ChannelDataTcpTransporter, ChannelDataUdpTransporter, StunTcpTransporter, StunTransporter,
-    StunUdpTransporter,
-};
-use turn_message::{TurnMessageDecoder, TurnMessageEncoder};
-use Error;
 
 mod core;
 

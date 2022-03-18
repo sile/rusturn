@@ -1,11 +1,10 @@
+use crate::client::Client;
 use bytecodec::{Decode, DecodeExt, Encode, EncodeExt};
 use fibers_transport::{ErrorKind, PollRecv, PollSend, Result, Transport, UdpTransport};
 use futures::Async;
 use std::collections::HashSet;
 use std::net::SocketAddr;
 use trackable::error::ErrorKindExt;
-
-use client::Client;
 
 #[derive(Debug)]
 pub struct UdpOverTurnTransporter<C, E, D> {

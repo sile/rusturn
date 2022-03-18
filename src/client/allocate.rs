@@ -1,16 +1,15 @@
+use super::core::ClientCore;
+use super::stun_transaction::StunTransaction;
+use crate::attribute::Attribute;
+use crate::auth::AuthParams;
+use crate::channel_data::ChannelData;
+use crate::{Error, ErrorKind, Result};
 use fibers_transport::Transport;
 use futures::{Async, Future, Poll};
 use rustun::channel::Channel as StunChannel;
 use rustun::message::{Request, Response};
 use rustun::transport::StunTransport;
 use stun_codec::{rfc5389, rfc5766};
-
-use super::core::ClientCore;
-use super::stun_transaction::StunTransaction;
-use attribute::Attribute;
-use auth::AuthParams;
-use channel_data::ChannelData;
-use {Error, ErrorKind, Result};
 
 const TRANSPORT_PROTOCOL_UDP: u8 = 17;
 

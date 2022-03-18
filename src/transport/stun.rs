@@ -1,12 +1,11 @@
+use crate::attribute::Attribute;
+use crate::turn_message::TurnMessage;
 use fibers_transport::{
     PollRecv, PollSend, RcTransporter, Result, TcpTransport, Transport, UdpTransport,
 };
 use futures::Async;
 use std::net::SocketAddr;
 use stun_codec::{DecodedMessage, Message};
-
-use attribute::Attribute;
-use turn_message::TurnMessage;
 
 #[derive(Debug)]
 pub struct StunTransporter<T: Transport> {
