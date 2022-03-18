@@ -85,7 +85,7 @@ where
                 }
 
                 let lifetime = track_assert_some!(lifetime, ErrorKind::Other; response);
-                let mut client = ClientCore::new(
+                let client = ClientCore::new(
                     self.stun_channel.take().expect("never fails"),
                     self.channel_data_transporter.take().expect("never fails"),
                     self.auth_params.clone(),
