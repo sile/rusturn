@@ -7,7 +7,7 @@ use rusturn::server::UdpServer;
 use std::net::SocketAddr;
 
 #[derive(Debug, Parser)]
-#[clap(name = "turncli")]
+#[clap(name = "turnsrv")]
 struct Opt {
     /// STUN server address.
     #[clap(long, default_value = "127.0.0.1:3478")]
