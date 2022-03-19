@@ -28,8 +28,20 @@ impl Decode for TurnMessageDecoder {
     fn decode(&mut self, buf: &[u8], eos: Eos) -> Result<usize> {
         loop {
             let next = match self {
-                TurnMessageDecoder::Stun(x) => return track!(x.decode(buf, eos)),
-                TurnMessageDecoder::ChannelData(x) => return track!(x.decode(buf, eos)),
+                TurnMessageDecoder::Stun(x) => {
+                    let result = track!(x.decode(buf, eos));
+                    if result.is_err() {
+                        *self = TurnMessageDecoder::None;
+                    }
+                    return result;
+                }
+                TurnMessageDecoder::ChannelData(x) => {
+                    let result = track!(x.decode(buf, eos));
+                    if result.is_err() {
+                        *self = TurnMessageDecoder::None;
+                    }
+                    return result;
+                }
                 TurnMessageDecoder::None => match buf.get(0).map(|&b| b >> 6) {
                     None => return Ok(0),
                     Some(0b00) => TurnMessageDecoder::Stun(Default::default()),
