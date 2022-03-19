@@ -49,7 +49,13 @@ impl Future for UdpServer {
     type Error = Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        track!(self.core.poll())
+        match track!(self.core.poll()) {
+            Err(e) => {
+                log::warn!("{}", e);
+                Ok(Async::NotReady)
+            }
+            other => other,
+        }
     }
 }
 
