@@ -1,6 +1,6 @@
 [package]
 name = "rusturn"
-version = "0.0.3"
+version = "0.0.4"
 authors = ["Takeru Ohta <phjgt308@gmail.com>"]
 description = "A Rust implementation of TURN server and client"
 homepage = "https://github.com/sile/rusturn"
