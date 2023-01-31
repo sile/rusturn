@@ -10,18 +10,15 @@ pub enum TurnMessage {
     ChannelData(ChannelData),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 #[allow(clippy::large_enum_variant)]
 pub enum TurnMessageDecoder {
     Stun(stun::MessageDecoder<Attribute>),
     ChannelData(ChannelDataDecoder),
+    #[default]
     None,
 }
-impl Default for TurnMessageDecoder {
-    fn default() -> Self {
-        TurnMessageDecoder::None
-    }
-}
+
 impl Decode for TurnMessageDecoder {
     type Item = TurnMessage;
 
@@ -83,17 +80,13 @@ impl Decode for TurnMessageDecoder {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 #[allow(clippy::large_enum_variant)]
 pub enum TurnMessageEncoder {
     Stun(stun::MessageEncoder<Attribute>),
     ChannelData(ChannelDataEncoder),
+    #[default]
     None,
-}
-impl Default for TurnMessageEncoder {
-    fn default() -> Self {
-        TurnMessageEncoder::None
-    }
 }
 impl Encode for TurnMessageEncoder {
     type Item = TurnMessage;

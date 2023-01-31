@@ -34,7 +34,7 @@ where
     fn poll_recv(&mut self) -> PollRecv<(Self::PeerAddr, Self::RecvItem)> {
         let do_recv = track!(self
             .inner
-            .with_peek_recv(|_peer, item| { !matches!(item, TurnMessage::ChannelData(_)) }))?;
+            .with_peek_recv(|_peer, item| { matches!(item, TurnMessage::ChannelData(_)) }))?;
         if do_recv == Some(true) {
             match track!(self.inner.poll_recv())? {
                 Async::Ready(Some((peer, TurnMessage::ChannelData(item)))) => {
