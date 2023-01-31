@@ -67,7 +67,10 @@ where
                 track!(self.handle_stun_indication(client, m))?;
             }
             RecvMessage::Invalid(m) => {
-                eprintln!("[ERROR:{}:{}] Invalid message: {:?}", file!(), line!(), m);
+                #[allow(clippy::print_literal)]
+                {
+                    eprintln!("[ERROR:{}:{}] Invalid message: {:?}", file!(), line!(), m);
+                }
             }
         }
         Ok(())
@@ -246,12 +249,15 @@ where
                 track!(self.handle_send(client, indication))?;
             }
             _ => {
-                eprintln!(
-                    "[WARN:{}:{}] Unknown STUN indication: {:?}",
-                    file!(),
-                    line!(),
-                    indication
-                );
+                #[allow(clippy::print_literal)]
+                {
+                    eprintln!(
+                        "[WARN:{}:{}] Unknown STUN indication: {:?}",
+                        file!(),
+                        line!(),
+                        indication
+                    );
+                }
             }
         }
         Ok(())
