@@ -74,7 +74,7 @@ where
                             lifetime = Some(a.lifetime());
                         }
                         Attribute::MessageIntegrity(a) => {
-                            track!(self.auth_params.validate(&a))?;
+                            track!(self.auth_params.validate(a))?;
                         }
                         Attribute::XorRelayAddress(a) => {
                             relay_addr = Some(a.address());

@@ -42,7 +42,7 @@ impl Decode for TurnMessageDecoder {
                     }
                     return result;
                 }
-                TurnMessageDecoder::None => match buf.get(0).map(|&b| b >> 6) {
+                TurnMessageDecoder::None => match buf.first().map(|&b| b >> 6) {
                     None => return Ok(0),
                     Some(0b00) => TurnMessageDecoder::Stun(Default::default()),
                     Some(0b01) => TurnMessageDecoder::ChannelData(Default::default()),

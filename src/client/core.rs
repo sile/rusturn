@@ -113,7 +113,7 @@ where
                             lifetime = Some(a.lifetime());
                         }
                         Attribute::MessageIntegrity(a) => {
-                            track!(self.auth_params.validate(&a))?;
+                            track!(self.auth_params.validate(a))?;
                         }
                         _ => {}
                     }
@@ -147,7 +147,7 @@ where
             Ok(response) => {
                 for attr in response.attributes() {
                     if let Attribute::MessageIntegrity(a) = attr {
-                        track!(self.auth_params.validate(&a))?;
+                        track!(self.auth_params.validate(a))?;
                     }
                 }
                 if let Some(reply) = reply {
@@ -183,7 +183,7 @@ where
             Ok(response) => {
                 for attr in response.attributes() {
                     if let Attribute::MessageIntegrity(a) = attr {
-                        track!(self.auth_params.validate(&a))?;
+                        track!(self.auth_params.validate(a))?;
                     }
                 }
 
