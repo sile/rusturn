@@ -12,8 +12,7 @@ license = "MIT"
 edition = "2021"
 
 [badges]
-travis-ci = {repository = "sile/rusturn"}
-codecov = {repository = "sile/rusturn"}
+coveralls = {repository = "sile/rustun"}
 
 [dependencies]
 bytecodec = "0.4"

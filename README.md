@@ -3,8 +3,8 @@ rusturn
 
 [![rusturn](https://img.shields.io/crates/v/rusturn.svg)](https://crates.io/crates/rusturn)
 [![Documentation](https://docs.rs/rusturn/badge.svg)](https://docs.rs/rusturn)
-[![Build Status](https://travis-ci.org/sile/rusturn.svg?branch=master)](https://travis-ci.org/sile/rusturn)
-[![Code Coverage](https://codecov.io/gh/sile/rusturn/branch/master/graph/badge.svg)](https://codecov.io/gh/sile/rusturn/branch/master)
+[![Actions Status](https://github.com/sile/rusturn/workflows/CI/badge.svg)](https://github.com/sile/rusturn/actions)
+[![Coverage Status](https://coveralls.io/repos/github/sile/rusturn/badge.svg?branch=master)](https://coveralls.io/github/sile/rusturn?branch=master)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A Rust implementation of [TURN][RFC 5766] server and client.
