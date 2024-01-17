@@ -1,5 +1,7 @@
 use self::core::ClientCore;
 use crate::auth::AuthParams;
+use std::os::fd::AsRawFd;
+
 use crate::transport::{
     ChannelDataTcpTransporter, ChannelDataUdpTransporter, StunTcpTransporter, StunTransporter,
     StunUdpTransporter,
@@ -23,6 +25,7 @@ pub trait Client {
     fn poll_send(&mut self) -> Poll<(), Error>;
     fn poll_recv(&mut self) -> Poll<Option<(SocketAddr, Vec<u8>)>, Error>;
     fn local_addr(&self) -> SocketAddr;
+    fn file_descriptor(&self) -> Option<i32>;
 }
 
 pub fn wait<C, FN, FU>(
@@ -129,6 +132,9 @@ impl Client for TcpClient {
             .inner_ref()
             .with_inner_ref(|x| x.local_addr())
     }
+    fn file_descriptor(&self) -> Option<i32> {
+        None
+    }
 }
 
 #[derive(Debug)]
@@ -138,13 +144,13 @@ pub struct UdpClient(
         FixedPeerTransporter<ChannelDataUdpTransporter, ()>,
     >,
 );
+
 impl UdpClient {
     pub fn allocate(
         server_addr: SocketAddr,
         auth_params: AuthParams,
     ) -> impl Future<Item = Self, Error = Error> {
         let bind_addr = "0.0.0.0:0".parse().expect("never fails");
-
         UdpTransporter::bind(bind_addr)
             .map_err(|e| track!(Error::from(e)))
             .and_then(move |transporter| {
@@ -164,6 +170,20 @@ impl UdpClient {
 }
 unsafe impl Send for UdpClient {}
 impl Client for UdpClient {
+    fn file_descriptor(&self) -> Option<i32> {
+        let mut my_fd: Option<i32> = None;
+        self.0
+            .stun_channel_ref()
+            .transporter_ref()
+            .inner_ref()
+            .inner_ref()
+            .with_inner_ref(|f| {
+                let socket: &fibers::net::UdpSocket = f.socket_ref();
+                socket.with_inner(|g| my_fd = Some(g.as_raw_fd()));
+            });
+        my_fd
+    }
+
     fn create_permission(&mut self, peer: SocketAddr) -> AsyncResult<()> {
         self.0.create_permission(peer)
     }
