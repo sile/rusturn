@@ -63,7 +63,7 @@ where
         relay_addr: Option<SocketAddr>,
     ) -> Self {
         let mut timeout_queue = TimeoutQueue::new();
-        timeout_queue.push(TimeoutEntry::Refresh, lifetime * 10 / 9);
+        timeout_queue.push(TimeoutEntry::Refresh, lifetime * 9 / 10);
         ClientCore {
             stun_channel,
             channel_data_transporter,
@@ -121,7 +121,7 @@ where
 
                 self.lifetime = track_assert_some!(lifetime, ErrorKind::Other; response);
                 self.timeout_queue
-                    .push(TimeoutEntry::Refresh, self.lifetime * 10 / 9);
+                    .push(TimeoutEntry::Refresh, self.lifetime * 9 / 10);
             }
         }
         Ok(())
@@ -156,7 +156,7 @@ where
                 self.permissions.insert(peer.ip(), None);
                 self.timeout_queue.push(
                     TimeoutEntry::Permission { peer },
-                    Duration::from_secs(PERMISSION_LIFETIME_SECONDS * 10 / 9),
+                    Duration::from_secs(PERMISSION_LIFETIME_SECONDS * 9 / 10),
                 );
             }
         }
@@ -194,7 +194,7 @@ where
                 self.channels.insert(peer, ChannelState::Created { number });
                 self.timeout_queue.push(
                     TimeoutEntry::Channel { peer },
-                    Duration::from_secs(CHANNEL_LIFETIME_SECONDS * 10 / 9),
+                    Duration::from_secs(CHANNEL_LIFETIME_SECONDS * 9 / 10),
                 );
             }
         }
@@ -226,7 +226,7 @@ where
                     self.permissions.insert(peer.ip(), None);
                     self.timeout_queue.push(
                         TimeoutEntry::Permission { peer },
-                        Duration::from_secs(PERMISSION_LIFETIME_SECONDS * 10 / 9),
+                        Duration::from_secs(PERMISSION_LIFETIME_SECONDS * 9 / 10),
                     );
                 }
             }
@@ -236,7 +236,7 @@ where
                     self.channels.insert(peer, state);
                     self.timeout_queue.push(
                         TimeoutEntry::Channel { peer },
-                        Duration::from_secs(CHANNEL_LIFETIME_SECONDS * 10 / 9),
+                        Duration::from_secs(CHANNEL_LIFETIME_SECONDS * 9 / 10),
                     );
                 }
             }
@@ -290,8 +290,7 @@ where
     }
 
     fn create_permission_inner(&mut self, peer: SocketAddr) -> Result<()> {
-        track_assert!(!self.permissions.contains_key(&peer.ip()), ErrorKind::InvalidInput; peer);
-
+        // If a permission already exists on the TURN server, it will just be refreshed.
         let mut request = Request::new(rfc5766::methods::CREATE_PERMISSION);
         request.add_attribute(rfc5766::attributes::XorPeerAddress::new(peer).into());
         track!(self.auth_params.add_auth_attributes(&mut request))?;
