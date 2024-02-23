@@ -11,7 +11,6 @@ use fibers_transport::{
     FixedPeerTransporter, RcTransporter, TcpTransport, TcpTransporter, UdpTransport, UdpTransporter,
 };
 use futures::{Async, Future, Poll};
-use std;
 use std::net::SocketAddr;
 
 mod allocate;

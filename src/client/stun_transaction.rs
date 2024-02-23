@@ -1,5 +1,5 @@
 use crate::attribute::Attribute;
-use futures::{self, Future, Poll};
+use futures::{Future, Poll};
 use rustun::message::{MessageError, Response};
 use std::fmt;
 use std::net::SocketAddr;

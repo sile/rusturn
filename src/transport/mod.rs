@@ -1,7 +1,6 @@
 use crate::attribute::Attribute;
 use crate::turn_message::{TurnMessageDecoder, TurnMessageEncoder};
 use fibers_transport::{TcpTransporter, UdpTransporter};
-use rustun;
 
 pub(crate) use self::channel_data::ChannelDataTransporter;
 pub(crate) use self::stun::StunTransporter;
