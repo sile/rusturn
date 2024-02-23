@@ -12,7 +12,7 @@ license = "MIT"
 edition = "2021"
 
 [badges]
-coveralls = {repository = "sile/rustun"}
+coveralls = {repository = "sile/rusturn"}
 
 [dependencies]
 bytecodec = "0.4"
