@@ -23,11 +23,11 @@ fibers_transport = "0.1"
 futures = "0.1"
 log = "0.4"
 rand = "0.8"
-rustun = "0.4"
-stun_codec = "0.2"
+rustun = "0.5"
+stun_codec = "0.3"
 trackable = "1"
 
 [dev-dependencies]
-clap = { version = "3", features = ["derive"] }
+clap = { version = "4", features = ["derive"] }
 env_logger = "0.9"
 fibers_global = "0.1.2"

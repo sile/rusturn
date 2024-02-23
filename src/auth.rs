@@ -68,9 +68,9 @@ impl AuthParams {
     {
         let realm = track_assert_some!(self.realm.clone(), ErrorKind::Other);
         let nonce = track_assert_some!(self.nonce.clone(), ErrorKind::Other);
-        message.as_mut().add_attribute(self.username.clone().into());
-        message.as_mut().add_attribute(realm.clone().into());
-        message.as_mut().add_attribute(nonce.into());
+        message.as_mut().add_attribute(self.username.clone());
+        message.as_mut().add_attribute(realm.clone());
+        message.as_mut().add_attribute(nonce);
         let mi = track!(
             rfc5389::attributes::MessageIntegrity::new_long_term_credential(
                 message.as_mut(),
@@ -79,7 +79,7 @@ impl AuthParams {
                 &self.password,
             )
         )?;
-        message.as_mut().add_attribute(mi.into());
+        message.as_mut().add_attribute(mi);
         Ok(())
     }
 
