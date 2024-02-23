@@ -108,7 +108,6 @@ impl<T> AsyncReply<T> {
 #[cfg(test)]
 mod tests {
     use futures::Future;
-    use rustun;
     use rustun::message::Request;
     use rustun::transport::StunUdpTransporter;
     use stun_codec::rfc5389;
