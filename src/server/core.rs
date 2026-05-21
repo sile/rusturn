@@ -319,7 +319,7 @@ where
                 let do_delete = self
                     .allocations
                     .get(&client)
-                    .map_or(false, |s| s.seqno == seqno);
+                    .is_some_and(|s| s.seqno == seqno);
                 if do_delete {
                     self.allocations.remove(&client);
                 }
@@ -333,7 +333,7 @@ where
                     let do_delete = allocation
                         .permissions
                         .get_mut(&peer)
-                        .map_or(false, |s| s.seqno == seqno);
+                        .is_some_and(|s| s.seqno == seqno);
                     if do_delete {
                         allocation.permissions.remove(&peer);
                     }
@@ -349,7 +349,7 @@ where
                     let do_delete = allocation
                         .channels
                         .get_mut(&channel_number)
-                        .map_or(false, |s| s.seqno == seqno);
+                        .is_some_and(|s| s.seqno == seqno);
                     if do_delete {
                         allocation.channels.remove(&channel_number);
                     }
